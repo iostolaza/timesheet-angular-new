@@ -1,0 +1,45 @@
+<!-- src/app/timesheet/start-page/start-page.component.html -->
+<div class="container">
+  <header class="flex justify-between items-center mb-8">
+    <h1>Timesheet Dashboard</h1>
+    <button class="btn btn-error" (click)="logout()">Logout</button>
+  </header>
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div class="card">
+      <div class="card-body">
+        <h2>Create Timesheet</h2>
+        <p class="text-gray-600">Start a new timesheet and add your time entries.</p>
+        <div class="card-actions">
+          <a routerLink="/calendar" class="btn btn-primary">Go to Calendar</a>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <h2>Review Timesheets</h2>
+        <p class="text-gray-600">View and manage your submitted timesheets.</p>
+        <div class="card-actions">
+          <a routerLink="/review" class="btn btn-primary">View Timesheets</a>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <h2>View Accounts</h2>
+        <p class="text-gray-600">Browse and manage financial accounts.</p>
+        <div class="card-actions">
+          <a routerLink="/accounts" class="btn btn-primary">View Accounts</a>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <h2>View Ledger</h2>
+        <p class="text-gray-600">Review all transaction history across accounts.</p>
+        <div class="card-actions">
+          <a routerLink="/ledger" class="btn btn-primary">View Ledger</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

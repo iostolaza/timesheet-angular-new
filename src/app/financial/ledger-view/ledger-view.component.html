@@ -1,0 +1,38 @@
+
+<!-- src/financial/ledger-view/ledger-view.component.html -->
+ 
+<div class="container">
+  <h1>{{ account ? 'Ledger for ' + account.name : 'Global Ledger' }}</h1>
+  <table mat-table [dataSource]="entriesDataSource" class="table">
+    <ng-container matColumnDef="account_name" *ngIf="!account">
+      <th mat-header-cell *matHeaderCellDef>Account</th>
+      <td mat-cell *matCellDef="let e">{{ getAccountName(e.account_id) }}</td>
+    </ng-container>
+    <ng-container matColumnDef="date">
+      <th mat-header-cell *matHeaderCellDef>Date</th>
+      <td mat-cell *matCellDef="let e">{{ e.date | date:'short' }}</td>
+    </ng-container>
+    <ng-container matColumnDef="ref">
+      <th mat-header-cell *matHeaderCellDef>Ref</th>
+      <td mat-cell *matCellDef="let e">{{ e.id }}</td>
+    </ng-container>
+    <ng-container matColumnDef="description">
+      <th mat-header-cell *matHeaderCellDef>Description</th>
+      <td mat-cell *matCellDef="let e">{{ e.description }}</td>
+    </ng-container>
+    <ng-container matColumnDef="debit">
+      <th mat-header-cell *matHeaderCellDef>Debit</th>
+      <td mat-cell *matCellDef="let e">{{ e.debit ? (e.amount | number:'1.2-2') : '' }}</td>
+    </ng-container>
+    <ng-container matColumnDef="credit">
+      <th mat-header-cell *matHeaderCellDef>Credit</th>
+      <td mat-cell *matCellDef="let e">{{ !e.debit ? (e.amount | number:'1.2-2') : '' }}</td>
+    </ng-container>
+    <ng-container matColumnDef="running">
+      <th mat-header-cell *matHeaderCellDef>Running Balance</th>
+      <td mat-cell *matCellDef="let e">{{ e.running_balance | number:'1.2-2' }}</td>
+    </ng-container>
+    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+    <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+  </table>
+</div>

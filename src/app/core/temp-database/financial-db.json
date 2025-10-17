@@ -1,0 +1,71 @@
+{
+    "accounts": [
+        {"id": 1, "account_number": "ACC-0001", "name": "Account 1", "details": "Financial account for operations", "balance": 178934, "starting_balance": 178934, "ending_balance": 178934, "date": "2025-10-16", "type": "Asset"},
+        {"id": 2, "account_number": "ACC-0002", "name": "Account 2", "details": "Financial account for operations", "balance": 56201, "starting_balance": 56201, "ending_balance": 56201, "date": "2025-10-16", "type": "Liability"},
+        {"id": 3, "account_number": "ACC-0003", "name": "Account 3", "details": "Financial account for operations", "balance": 135697, "starting_balance": 135697, "ending_balance": 135697, "date": "2025-10-16", "type": "Asset"},
+        {"id": 4, "account_number": "ACC-0004", "name": "Account 4", "details": "Financial account for operations", "balance": 482615, "starting_balance": 482615, "ending_balance": 482615, "date": "2025-10-16", "type": "Liability"},
+        {"id": 5, "account_number": "ACC-0005", "name": "Account 5", "details": "Financial account for operations", "balance": 234883, "starting_balance": 234883, "ending_balance": 234883, "date": "2025-10-16", "type": "Asset"},
+        {"id": 6, "account_number": "ACC-0006", "name": "Account 6", "details": "Financial account for operations", "balance": 225774, "starting_balance": 225774, "ending_balance": 225774, "date": "2025-10-16", "type": "Liability"},
+        {"id": 7, "account_number": "ACC-0007", "name": "Account 7", "details": "Financial account for operations", "balance": 101460, "starting_balance": 101460, "ending_balance": 101460, "date": "2025-10-16", "type": "Asset"},
+        {"id": 8, "account_number": "ACC-0008", "name": "Account 8", "details": "Financial account for operations", "balance": 373560, "starting_balance": 373560, "ending_balance": 373560, "date": "2025-10-16", "type": "Liability"},
+        {"id": 9, "account_number": "ACC-0009", "name": "Account 9", "details": "Financial account for operations", "balance": 387294, "starting_balance": 387294, "ending_balance": 387294, "date": "2025-10-16", "type": "Asset"},
+        {"id": 10, "account_number": "ACC-0010", "name": "Account 10", "details": "Financial account for operations", "balance": 284895, "starting_balance": 284895, "ending_balance": 284895, "date": "2025-10-16", "type": "Liability"}
+    ],
+    "employees": [
+        {"id": 1, "name": "Employee1"},
+        {"id": 2, "name": "Employee2"},
+        {"id": 3, "name": "Employee3"}
+    ],
+    "charge_codes": [
+        {"id": 1, "account_id": 1, "employee_id": 1, "charge_code": "9DW5Z2"},
+        {"id": 2, "account_id": 1, "employee_id": 2, "charge_code": "D4FYX7"},
+        {"id": 3, "account_id": 1, "employee_id": 3, "charge_code": "3FKDHO"},
+        {"id": 4, "account_id": 2, "employee_id": 1, "charge_code": "7RC7VV"},
+        {"id": 5, "account_id": 2, "employee_id": 2, "charge_code": "JJ77NS"},
+        {"id": 6, "account_id": 2, "employee_id": 3, "charge_code": "7CTHK4"},
+        {"id": 7, "account_id": 3, "employee_id": 1, "charge_code": "1BFDZV"},
+        {"id": 8, "account_id": 3, "employee_id": 2, "charge_code": "GQBFG7"},
+        {"id": 9, "account_id": 3, "employee_id": 3, "charge_code": "YGY7WJ"},
+        {"id": 10, "account_id": 4, "employee_id": 1, "charge_code": "6XOLR9"},
+        {"id": 11, "account_id": 4, "employee_id": 2, "charge_code": "BCPB6J"},
+        {"id": 12, "account_id": 4, "employee_id": 3, "charge_code": "I2UR2N"},
+        {"id": 13, "account_id": 5, "employee_id": 1, "charge_code": "25680Y"},
+        {"id": 14, "account_id": 5, "employee_id": 2, "charge_code": "SX2LTD"},
+        {"id": 15, "account_id": 5, "employee_id": 3, "charge_code": "FIFJV5"},
+        {"id": 16, "account_id": 6, "employee_id": 1, "charge_code": "E93B0T"},
+        {"id": 17, "account_id": 6, "employee_id": 2, "charge_code": "NB9N64"},
+        {"id": 18, "account_id": 6, "employee_id": 3, "charge_code": "Y58GMF"},
+        {"id": 19, "account_id": 7, "employee_id": 1, "charge_code": "0D41SW"},
+        {"id": 20, "account_id": 7, "employee_id": 2, "charge_code": "PLAV9J"},
+        {"id": 21, "account_id": 7, "employee_id": 3, "charge_code": "YVQIZG"},
+        {"id": 22, "account_id": 8, "employee_id": 1, "charge_code": "ILWWAW"},
+        {"id": 23, "account_id": 8, "employee_id": 2, "charge_code": "5PNCO0"},
+        {"id": 24, "account_id": 8, "employee_id": 3, "charge_code": "7OI8P1"},
+        {"id": 25, "account_id": 9, "employee_id": 1, "charge_code": "N5FVJT"},
+        {"id": 26, "account_id": 9, "employee_id": 2, "charge_code": "K8X4IB"},
+        {"id": 27, "account_id": 9, "employee_id": 3, "charge_code": "LEIY6J"},
+        {"id": 28, "account_id": 10, "employee_id": 1, "charge_code": "IGUI1X"},
+        {"id": 29, "account_id": 10, "employee_id": 2, "charge_code": "7KLUF4"},
+        {"id": 30, "account_id": 10, "employee_id": 3, "charge_code": "3G2B85"}
+    ],
+    "transactions": [
+        {
+            "id": 1,
+            "account_id": 1,
+            "amount": 5000,
+            "debit": false,
+            "date": "2025-10-15T09:00:00Z",
+            "description": "Charge by Employee1 using code 9DW5Z2",
+            "running_balance": 173934
+        },
+        {
+            "id": 2,
+            "account_id": 3,
+            "amount": 3000,
+            "debit": false,
+            "date": "2025-10-15T14:00:00Z",
+            "description": "Charge by Employee2 using code GQBFG7",
+            "running_balance": 132697
+        }
+    ]
+}

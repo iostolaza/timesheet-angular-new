@@ -1,0 +1,33 @@
+
+<!-- src/financial/account-list/account-list.component.html -->
+ 
+<div class="container">
+  <h1>Account List</h1>
+  <table mat-table [dataSource]="accountsDataSource" class="table">
+    <ng-container matColumnDef="name">
+      <th mat-header-cell *matHeaderCellDef>Name</th>
+      <td mat-cell *matCellDef="let acct">{{ acct.name }}</td>
+    </ng-container>
+    <ng-container matColumnDef="account_number">
+      <th mat-header-cell *matHeaderCellDef>Account Number</th>
+      <td mat-cell *matCellDef="let acct">{{ acct.account_number }}</td>
+    </ng-container>
+    <ng-container matColumnDef="details">
+      <th mat-header-cell *matHeaderCellDef>Details</th>
+      <td mat-cell *matCellDef="let acct">{{ acct.details }}</td>
+    </ng-container>
+    <ng-container matColumnDef="balance">
+      <th mat-header-cell *matHeaderCellDef>Balance</th>
+      <td mat-cell *matCellDef="let acct">{{ acct.balance | currency }}</td>
+    </ng-container>
+    <ng-container matColumnDef="actions">
+      <th mat-header-cell *matHeaderCellDef>Actions</th>
+      <td mat-cell *matCellDef="let acct">
+        <button mat-button class="btn btn-primary" (click)="openLedger(acct.id)">View Ledger</button>
+        <button mat-button class="btn btn-secondary" *ngIf="canPost(acct)" (click)="openChargeModal(acct)">Request Charge</button>
+      </td>
+    </ng-container>
+    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+    <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+  </table>
+</div>

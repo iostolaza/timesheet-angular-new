@@ -1,0 +1,23 @@
+
+<!-- src/timesheet/review-form/review-form.component.html -->
+
+<div class="dialog">
+  <h2 mat-dialog-title>Review Timesheet</h2>
+  <mat-dialog-content>
+    <form [formGroup]="reviewForm" class="space-y-4">
+      <div class="flex items-center gap-4">
+        <label class="text-gray-700">Approve</label>
+        <input type="checkbox" formControlName="approved" class="toggle toggle-primary">
+      </div>
+      <mat-form-field appearance="fill" class="form-field" *ngIf="!reviewForm.get('approved')?.value">
+        <mat-label>Rejection Reason</mat-label>
+        <textarea matInput formControlName="rejectionReason"></textarea>
+        <mat-error *ngIf="reviewForm.get('rejectionReason')?.hasError('required')" class="error">Rejection reason is required</mat-error>
+      </mat-form-field>
+    </form>
+  </mat-dialog-content>
+  <mat-dialog-actions class="flex justify-end gap-2">
+    <button mat-button class="btn btn-outline" (click)="onCancel()">Cancel</button>
+    <button mat-raised-button color="primary" class="btn btn-primary" [disabled]="reviewForm.invalid" (click)="onSubmit()">Submit</button>
+  </mat-dialog-actions>
+</div>
