@@ -1,18 +1,27 @@
-
 // src/app/core/services/auth.service.ts
 
 import { Injectable } from '@angular/core';
 import { Amplify } from 'aws-amplify';
-import { Auth } from '@aws-amplify/auth';
-import { Hub } from '@aws-amplify/utils';
+import { signIn, signOut, fetchAuthSession } from 'aws-amplify/auth';
+import { Hub } from 'aws-amplify/utils';
 import { Observable, from, BehaviorSubject, throwError, of } from 'rxjs';
-import { map, catchError } from 'rxjs/operators';
+import { map, catchError, switchMap, filter } from 'rxjs/operators';
 import outputs from '../../../../amplify_outputs.json';
 
 interface CognitoUser {
   sub: string;
   username: string;
   groups: string[];
+}
+
+interface HubPayload {
+  event: string;
+  data?: {
+    tokens?: {
+      idToken?: { payload: Record<string, unknown> };
+    };
+    username?: string;
+  };
 }
 
 @Injectable({
@@ -23,15 +32,18 @@ export class AuthService {
 
   constructor() {
     Amplify.configure(outputs);
-    Hub.listen('auth', (data) => {  // Hub payload direct
-      const { payload: { event, data: hubData } } = data;
-      if (event === 'signIn') {
-        const payload = hubData.signInUserSession?.idToken.payload;
-        this.userSubject.next({
-          sub: payload.sub,
-          username: hubData.username,
-          groups: payload['cognito:groups'] || [],
-        });
+    Hub.listen('auth', ({ payload }: { payload: HubPayload }) => {
+      const { event, data } = payload;
+      if (event === 'signIn' && data?.tokens?.idToken?.payload) {
+        const payloadData = data.tokens.idToken.payload as Record<string, unknown>;
+        const sub = payloadData['sub'] as string;
+        if (sub) {
+          this.userSubject.next({
+            sub,
+            username: ((payloadData['cognito:username'] || payloadData['preferred_username'] || data.username || '') as string),
+            groups: Array.isArray(payloadData['cognito:groups']) ? payloadData['cognito:groups'] as string[] : [],
+          });
+        }
       } else if (event === 'signOut') {
         this.userSubject.next(null);
       }
@@ -40,23 +52,14 @@ export class AuthService {
   }
 
   signIn(username: string, password: string): Observable<CognitoUser> {
-    return from(Auth.signIn({ username, password })).pipe(
-      map((user) => {
-        const payload = user.signInUserSession?.idToken.payload;
-        const cognitoUser: CognitoUser = {
-          sub: payload.sub,
-          username: user.username,
-          groups: payload['cognito:groups'] || [],
-        };
-        this.userSubject.next(cognitoUser);
-        return cognitoUser;
-      }),
+    return from(signIn({ username, password })).pipe(
+      switchMap(() => this.getCurrentUser().pipe(filter((user): user is CognitoUser => user !== null))),
       catchError((error) => throwError(() => new Error(`Sign-in failed: ${error.message}`)))
     );
   }
 
   signOut(): Observable<void> {
-    return from(Auth.signOut()).pipe(
+    return from(signOut()).pipe(
       map(() => {
         this.userSubject.next(null);
         return undefined;
@@ -66,13 +69,16 @@ export class AuthService {
   }
 
   getCurrentUser(): Observable<CognitoUser | null> {
-    return from(Auth.fetchUser()).pipe(  // currentAuthenticatedUser -> fetchUser in v6
-      map((user) => {
-        const payload = user.signInUserSession?.idToken.payload;
+    return from(fetchAuthSession()).pipe(
+      map((session) => {
+        if (!session.tokens?.idToken?.payload) return null;
+        const payload = session.tokens.idToken.payload as Record<string, unknown>;
+        const sub = payload['sub'] as string;
+        if (!sub) return null;
         return {
-          sub: payload.sub,
-          username: user.username,
-          groups: payload['cognito:groups'] || [],
+          sub,
+          username: ((payload['cognito:username'] || payload['preferred_username'] || '') as string),
+          groups: Array.isArray(payload['cognito:groups']) ? payload['cognito:groups'] as string[] : [],
         };
       }),
       catchError(() => of(null))

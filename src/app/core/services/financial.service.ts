@@ -1,9 +1,8 @@
-
 // src/app/core/services/financial.service.ts
 
 import { Injectable, inject } from '@angular/core';
 import { generateClient } from 'aws-amplify/data';
-import type { Schema } from '@/amplify/data/resource';
+import type { Schema } from '../../../../amplify/data/resource';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from './auth.service';
 import { Account, Transaction, User } from '../models/financial.model';
@@ -16,12 +15,13 @@ export class FinancialService {
   private authService = inject(AuthService);
 
   async listAccounts(): Promise<Account[]> {
-    const { data } = await this.client.models.Account.list();
+    const { data } = await this.client.models.Account.list({});
     return data as Account[];
   }
 
   async getUserById(id: string): Promise<User> {
     const { data } = await this.client.models.User.get({ id });
+    if (!data) throw new Error(`User with id ${id} not found`);
     return data as User;
   }
 

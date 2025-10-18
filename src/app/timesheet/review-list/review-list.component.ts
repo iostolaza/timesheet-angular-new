@@ -9,7 +9,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { TimesheetService } from '../../core/services/timesheet.service';
-import { ReviewFormComponent } from './review-form.component';
+import { ReviewFormComponent } from '../../timesheet/review-form/review-form.component';
 import { Timesheet } from '../../core/models/timesheet.model';
 
 @Component({

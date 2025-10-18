@@ -1,13 +1,13 @@
-
 // src/app/core/services/timesheet.service.ts
 
 import { Injectable, inject } from '@angular/core';
 import { generateClient } from 'aws-amplify/data';
-import type { Schema } from '@/amplify/data/resource';
+import type { Schema } from '../../../../amplify/data/resource';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from './auth.service';
 import { FinancialService } from './financial.service';
 import { Timesheet, TimesheetEntry } from '../models/timesheet.model';
+import { Account } from '../models/financial.model';
 import { addDays, startOfWeek } from 'date-fns';
 
 @Injectable({
@@ -28,7 +28,7 @@ export class TimesheetService {
 
   async listTimesheets(status?: 'draft' | 'submitted' | 'rejected'): Promise<Timesheet[]> {
     const sub = await firstValueFrom(this.authService.getUserSub());
-    const query: any = { filter: { owner: { eq: sub } } };
+    const query: any = { filter: { owner: { eq: sub! } } };
     if (status) query.filter.status = { eq: status };
     const { data } = await this.client.models.Timesheet.list(query);
     return data as Timesheet[];
@@ -36,6 +36,7 @@ export class TimesheetService {
 
   async getTimesheetWithEntries(id: string): Promise<Timesheet & { entries: TimesheetEntry[] }> {
     const { data: ts } = await this.client.models.Timesheet.get({ id });
+    if (!ts) throw new Error(`Timesheet ${id} not found`);
     const { data: entries } = await this.client.models.TimesheetEntry.list({
       filter: { timesheetId: { eq: id } },
     });
@@ -45,11 +46,11 @@ export class TimesheetService {
   async addEntry(entry: Omit<TimesheetEntry, 'id'>, timesheetId: string): Promise<TimesheetEntry> {
     const sub = await firstValueFrom(this.authService.getUserSub());
     const fullEntry = { ...entry, owner: sub!, timesheetId };
-    // Daily/weekly validations (unchanged)
+    // Daily/weekly validations
     const { data: existing } = await this.client.models.TimesheetEntry.list({
       filter: { timesheetId: { eq: timesheetId }, date: { eq: fullEntry.date } },
     });
-    const dailyTotal = existing.reduce((sum: number, e: any) => sum + e.hours, 0) + fullEntry.hours;
+    const dailyTotal = (existing as TimesheetEntry[]).reduce((sum, e) => sum + e.hours, 0) + fullEntry.hours;
     if (dailyTotal > 8) throw new Error('Daily hours exceed 8');
 
     const weekStart = startOfWeek(new Date(fullEntry.date)).toISOString().split('T')[0];
@@ -57,7 +58,7 @@ export class TimesheetService {
     const { data: weekEntries } = await this.client.models.TimesheetEntry.list({
       filter: { timesheetId: { eq: timesheetId }, date: { between: [weekStart, weekEnd] } },
     });
-    const weeklyTotal = weekEntries.reduce((sum: number, e: any) => sum + e.hours, 0) + fullEntry.hours;
+    const weeklyTotal = (weekEntries as TimesheetEntry[]).reduce((sum, e) => sum + e.hours, 0) + fullEntry.hours;
     if (weeklyTotal > 40) throw new Error('Weekly hours exceed 40');
 
     const groups = await firstValueFrom(this.authService.getUserGroups());
@@ -91,9 +92,9 @@ export class TimesheetService {
       const { data: accounts } = await this.client.models.Account.list({
         filter: { accountNumber: { eq: entry.chargeCode } },
       });
-      if (accounts.length === 0) throw new Error(`Account not found for ${entry.chargeCode}`);
-      const account = accounts[0] as any;
-      const amount = entry.hours * user.rate;  // User rate
+      if ((accounts as Account[]).length === 0) throw new Error(`Account not found for ${entry.chargeCode}`);
+      const account = accounts[0] as Account;
+      const amount = entry.hours * user.rate;
       totalCost += amount;
 
       await this.client.models.Transaction.create({

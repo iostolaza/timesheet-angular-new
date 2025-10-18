@@ -2,7 +2,7 @@ import { defineAuth } from '@aws-amplify/backend';
 
 export const auth = defineAuth({
   loginWith: {
-    username: true,
+    email: true,  // Enables username/email login; Cognito uses email as username
   },
   userAttributes: {
     email: { required: false },
