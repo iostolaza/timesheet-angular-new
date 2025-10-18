@@ -5,98 +5,83 @@ adding a new "isDone" field as a boolean. The authorization rule below
 specifies that any unauthenticated user can "create", "read", "update", 
 and "delete" any "Todo" records.
 =========================================================================*/
-import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
-
-const schema = a.schema({
-  Timesheet: a
-    .model({
-      id: a.string().required(),
-      status: a.enum(['draft', 'submitted', 'approved', 'rejected']),
-      entries: a.hasMany('TimesheetEntry', 'timesheetId'),
-      totalHours: a.float(),
-      totalCost: a.float(),
-      owner: a.string(),
-      rejectionReason: a.string()
-    })
-    .authorization(allow => [allow.owner()]),
-  TimesheetEntry: a
-    .model({
-      id: a.string().required(),
-      timesheetId: a.string().required(),
-      date: a.string().required(),
-      startTime: a.string().required(),
-      endTime: a.string().required(),
-      hours: a.float().required(),
-      description: a.string().required(),
-      accountId: a.integer().required()
-    })
-    .authorization(allow => [allow.ownerDefinedIn('timesheetId')]),
-  Account: a
-    .model({
-      id: a.integer().required(),
-      account_number: a.string().required(),
-      name: a.string().required(),
-      details: a.string(),
-      balance: a.float().required(),
-      starting_balance: a.float().required(),
-      ending_balance: a.float(),
-      date: a.string().required(),
-      type: a.enum(['Asset', 'Liability', 'Equity', 'Revenue', 'Expense'])
-    })
-    .authorization(allow => [allow.owner()]),
-  Employee: a
-    .model({
-      id: a.integer().required(),
-      name: a.string().required()
-    })
-    .authorization(allow => [allow.owner()]),
-  ChargeCode: a
-    .model({
-      id: a.integer().required(),
-      account_id: a.integer().required(),
-      employee_id: a.integer().required(),
-      charge_code: a.string().required()
-    })
-    .authorization(allow => [allow.owner()]),
-  User: a
-    .model({
-      id: a.integer().required(),
-      name: a.string().required(),
-      role: a.enum(['Employee', 'Manager', 'Admin'])
-    })
-    .authorization(allow => [allow.owner()]),
-  Permission: a
-    .model({
-      id: a.integer().required(),
-      user_id: a.integer().required(),
-      account_id: a.integer().required(),
-      can_view: a.boolean().required()
-    })
-    .authorization(allow => [allow.owner()]),
-  Transaction: a
-    .model({
-      id: a.integer().required(),
-      account_id: a.integer().required(),
-      from_account_id: a.integer(),
-      from_name: a.string(),
-      amount: a.float().required(),
-      debit: a.boolean().required(),
-      date: a.string().required(),
-      description: a.string().required(),
-      running_balance: a.float().required()
-    })
-    .authorization(allow => [allow.owner()])
-});
-
-export type Schema = ClientSchema<typeof schema>;
+import { a, defineData } from '@aws-amplify/backend';
+import { auth } from '../auth/resource.js';
 
 export const data = defineData({
-  schema,
+  schema: a.schema({
+    User: a.model({
+        id: a.string().required(),  // Cognito sub
+        name: a.string().required(),
+        role: a.enum(['Employee', 'Manager', 'Admin']),
+        rate: a.float().required(),  // Hourly rate per user
+      })
+      .authorization((allow) => [
+        allow.owner('id').to(['read', 'update']),  // Self-update
+        allow.authenticated().to(['read']),
+      ]),
+    Account: a.model({
+        accountNumber: a.string().required(),
+        name: a.string().required(),
+        details: a.string(),
+        balance: a.float().required(),
+        startingBalance: a.float().required(),
+        endingBalance: a.float(),
+        date: a.string().required(),
+        type: a.enum(['Asset', 'Liability', 'Equity', 'Revenue', 'Expense']),
+        rate: a.float().required(),  // Fallback if user rate not used
+        chargeCodes: a.string().array(),
+        transactions: a.hasMany('Transaction', 'accountId'),
+      })
+      .authorization((allow) => [
+        allow.authenticated().to(['read']),
+        allow.groups(['Admin']).to(['create', 'update', 'delete']),
+      ]),
+    Transaction: a.model({
+        accountId: a.id().required(),
+        fromAccountId: a.id(),
+        fromName: a.string(),
+        amount: a.float().required(),
+        debit: a.boolean().required(),
+        date: a.string().required(),
+        description: a.string().required(),
+        runningBalance: a.float().required(),
+        account: a.belongsTo('Account', 'accountId'),
+      })
+      .authorization((allow) => [
+        allow.authenticated().to(['read', 'create', 'update', 'delete']),
+      ]),
+    Timesheet: a.model({
+        status: a.enum(['draft', 'submitted', 'approved', 'rejected']),
+        totalHours: a.float().required(),
+        totalCost: a.float(),
+        owner: a.string().required(),
+        rejectionReason: a.string(),
+        entries: a.hasMany('TimesheetEntry', 'timesheetId'),
+      })
+      .authorization((allow) => [
+        allow.owner().to(['read', 'update', 'delete']),
+        allow.authenticated().to(['read']),
+      ]),
+    TimesheetEntry: a.model({
+        timesheetId: a.id().required(),
+        date: a.string().required(),
+        startTime: a.string().required(),
+        endTime: a.string().required(),
+        hours: a.float().required(),
+        description: a.string().required(),
+        chargeCode: a.string().required(),
+        owner: a.string().required(),
+        timesheet: a.belongsTo('Timesheet', 'timesheetId'),
+      })
+      .authorization((allow) => [
+        allow.owner().to(['read', 'update', 'delete']),
+      ]),
+  }),
   authorizationModes: {
-    defaultAuthorizationMode: 'identityPool'
-  }
+    defaultAuthorizationMode: 'userPool',
+  },
 });
-
 /*== STEP 2 ===============================================================
 Go to your frontend source code. From your client-side code, generate a
 Data client to make CRUDL requests to your table. (THIS SNIPPET WILL ONLY

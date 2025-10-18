@@ -1,0 +1,22 @@
+
+<!-- src/app/timesheet/calendar-view/day-entry-dialog.component.html -->
+
+<h2 mat-dialog-title>Entries for {{data.date}}</h2>
+<mat-dialog-content>
+  <form [formGroup]="form">
+    <div formArrayName="entries">
+      <div *ngFor="let entry of entries.controls; let i = index" [formGroupName]="i" class="mb-4 p-4 border rounded">
+        <input formControlName="startTime" placeholder="Start (HH:MM)" class="border p-2 mr-2" required>
+        <input formControlName="endTime" placeholder="End (HH:MM)" class="border p-2 mr-2" required>
+        <input formControlName="description" placeholder="Description" class="border p-2 mr-2" required>
+        <input formControlName="chargeCode" placeholder="Charge Code" class="border p-2 mr-2" required>
+        <button type="button" mat-button color="warn" (click)="removeEntry(i)">Remove</button>
+      </div>
+    </div>
+    <button type="button" mat-raised-button (click)="addEntry()">Add Entry</button>
+  </form>
+</mat-dialog-content>
+<mat-dialog-actions>
+  <button mat-button (click)="dialogRef.close()">Cancel</button>
+  <button mat-raised-button color="primary" [disabled]="form.invalid" (click)="save()">Save</button>
+</mat-dialog-actions>

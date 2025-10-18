@@ -1,22 +1,20 @@
 <!-- src/app/auth/auth.component.html -->
-<div class="auth-container">
-  <div class="card">
-    <div class="card-body">
-      <h2>Login</h2>
-      <form (ngSubmit)="onLogin()">
-        <div class="form-field">
-          <label for="username">Username</label>
-          <input id="username" type="textწ
-text" [(ngModel)]="username" class="input input-bordered w-full" />
-        </div>
-        <div class="form-field mt-4">
-          <label for="password">Password</label>
-          <input id="password" type="password" [(ngModel)]="password" class="input input-bordered w-full" />
-        </div>
-        <button type="submit" class="btn btn-primary mt-4" [disabled]="isLoading">Login</button>
+
+
+    <div class="container">
+      <h1>Login</h1>
+      <form [formGroup]="loginForm" (ngSubmit)="onSubmit()">
+        <mat-form-field appearance="fill">
+          <mat-label>Username</mat-label>
+          <input matInput formControlName="username" required>
+          <mat-error *ngIf="loginForm.get('username')?.hasError('required')">Username is required</mat-error>
+        </mat-form-field>
+        <mat-form-field appearance="fill">
+          <mat-label>Password</mat-label>
+          <input matInput type="password" formControlName="password" required>
+          <mat-error *ngIf="loginForm.get('password')?.hasError('required')">Password is required</mat-error>
+        </mat-form-field>
+        <button mat-raised-button color="primary" type="submit" [disabled]="loginForm.invalid">Login</button>
         <p *ngIf="error" class="error">{{ error }}</p>
       </form>
-      <p class="text-gray-600 mt-4">Don't have an account? Sign up to start managing your timesheets.</p>
     </div>
-  </div>
-</div>

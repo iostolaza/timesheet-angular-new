@@ -1,49 +1,48 @@
 
-// src/timesheet/review-form/review-form.component.ts
+// src/app/timesheet/review-form/review-form.component.ts
 
 import { Component, Inject } from '@angular/core';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
-import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
-import { MatButtonModule } from '@angular/material/button';
+import { MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { CommonModule } from '@angular/common';
 
 @Component({
   selector: 'app-review-form',
   standalone: true,
-  imports: [ReactiveFormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule, CommonModule],
-  templateUrl: './review-form.component.html'
+  imports: [CommonModule, ReactiveFormsModule, MatDialogModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatCheckboxModule],
+  templateUrl: './review-form.component.html',
 })
 export class ReviewFormComponent {
   reviewForm: FormGroup;
-
   constructor(
-    private fb: FormBuilder,
     public dialogRef: MatDialogRef<ReviewFormComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: { timesheet: any }
+    @Inject(MAT_DIALOG_DATA) public data: { id: string },
+    private fb: FormBuilder
   ) {
     this.reviewForm = this.fb.group({
-      approved: [true],
-      rejectionReason: ['', [this.rejectionReasonValidator.bind(this)]]
+      approved: [false],
+      rejectionReason: ['', Validators.required],
+    });
+    this.reviewForm.get('rejectionReason')?.setValidators(this.reviewForm.get('approved')?.value ? null : Validators.required);
+    this.reviewForm.get('approved')?.valueChanges.subscribe(approved => {
+      const reason = this.reviewForm.get('rejectionReason');
+      reason?.setValidators(approved ? null : Validators.required);
+      reason?.updateValueAndValidity();
     });
   }
 
-  rejectionReasonValidator(control: import('@angular/forms').AbstractControl) {
-    const approved = this.reviewForm?.get('approved')?.value;
-    if (!approved && !control.value) {
-      return { required: true };
-    }
-    return null;
+  onCancel(): void {
+    this.dialogRef.close();
   }
 
-  onSubmit() {
+  onSubmit(): void {
     if (this.reviewForm.valid) {
       this.dialogRef.close(this.reviewForm.value);
     }
-  }
-
-  onCancel() {
-    this.dialogRef.close();
   }
 }

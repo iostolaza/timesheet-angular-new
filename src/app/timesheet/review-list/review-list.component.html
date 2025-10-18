@@ -1,0 +1,36 @@
+
+<!-- src/app/timesheet/review-list/review-list.component.html -->
+ 
+<div class="container p-4">
+  <h1 class="text-2xl font-bold mb-4">Review Timesheets</h1>
+  <table mat-table [dataSource]="dataSource" class="w-full table-auto border-collapse border border-gray-300">
+    <ng-container matColumnDef="id">
+      <th mat-header-cell *matHeaderCellDef class="border p-2">ID</th>
+      <td mat-cell *matCellDef="let ts" class="border p-2">{{ ts.id }}</td>
+    </ng-container>
+    <ng-container matColumnDef="status">
+      <th mat-header-cell *matHeaderCellDef class="border p-2">Status</th>
+      <td mat-cell *matCellDef="let ts" class="border p-2">{{ ts.status }}</td>
+    </ng-container>
+    <ng-container matColumnDef="totalHours">
+      <th mat-header-cell *matHeaderCellDef class="border p-2">Total Hours</th>
+      <td mat-cell *matCellDef="let ts" class="border p-2">{{ ts.totalHours }}</td>
+    </ng-container>
+    <ng-container matColumnDef="actions">
+      <th mat-header-cell *matHeaderCellDef class="border p-2">Actions</th>
+      <td mat-cell *matCellDef="let ts" class="border p-2">
+        <button mat-button (click)="edit(ts.id)" *ngIf="ts.status === 'draft' || ts.status === 'rejected'">Edit</button>
+        <button mat-button (click)="resubmit(ts.id)" *ngIf="ts.status === 'rejected'">Resubmit</button>
+        <button mat-button (click)="openReview(ts.id)" *ngIf="ts.status === 'submitted'">Review</button>
+      </td>
+    </ng-container>
+    <ng-container matColumnDef="approve" *ngIf="isManager">
+      <th mat-header-cell *matHeaderCellDef class="border p-2">Manager Actions</th>
+      <td mat-cell *matCellDef="let ts" class="border p-2">
+        <button mat-button color="primary" (click)="openReview(ts.id)" *ngIf="ts.status === 'submitted'">Approve/Reject</button>
+      </td>
+    </ng-container>
+    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+    <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+  </table>
+</div>

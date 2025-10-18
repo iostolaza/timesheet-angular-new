@@ -1,63 +1,39 @@
 
-// src/financial/account-list/account-list.component.ts
+// src/app/timesheet/account-list/account-list.component.ts
 
-import { Component, OnInit } from '@angular/core';
-import { MatTableDataSource, MatTableModule } from '@angular/material/table';
+import { Component, inject, OnInit } from '@angular/core';
+import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
-import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { FinancialService } from '../../app/core/services/financial.service';
-import { AuthService } from '../../app/core/services/auth.service';
-import { Account } from '../../app/core/models/financial.model';
-import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { CommonModule, CurrencyPipe } from '@angular/common';
+import { FinancialService } from '../../core/services/financial.service';
+import { Account } from '../../core/models/financial.model';
 
 @Component({
   selector: 'app-account-list',
   standalone: true,
-  imports: [MatTableModule, MatButtonModule, CommonModule, MatDialogModule],
-  templateUrl: './account-list.component.html'
+  imports: [CommonModule, MatTableModule, MatButtonModule, CurrencyPipe],
+  templateUrl: './account-list.component.html',
 })
 export class AccountListComponent implements OnInit {
-  displayedColumns: string[] = ['name', 'account_number', 'details', 'balance', 'actions'];
-  accountsDataSource = new MatTableDataSource<Account>();
-  private userId = 1; // Mock, get from AuthService
-
-  constructor(
-    private financialService: FinancialService,
-    private authService: AuthService,
-    private router: Router,
-    private dialog: MatDialog
-  ) {}
+  displayedColumns: string[] = ['name', 'accountNumber', 'details', 'balance', 'actions'];
+  dataSource: Account[] = [];
+  private financialService = inject(FinancialService);
+  private router = inject(Router);
 
   async ngOnInit() {
-    // In real app, get userId from AuthService
-    this.financialService.getAccounts(this.userId).subscribe(accounts => {
-      this.accountsDataSource.data = accounts;
-    });
-  }
-
-  openLedger(accountId: number): void {
-    this.router.navigate(['/ledger', accountId]);
+    this.dataSource = await this.financialService.listAccounts();
   }
 
   canPost(account: Account): boolean {
-    return this.financialService.canPost(account, this.userId);
+    return true;  // Stub
+  }
+
+  openLedger(id?: string): void {
+    this.router.navigate(['/accounts/ledger', id]);
   }
 
   openChargeModal(account: Account): void {
-    // Placeholder: Open a dialog to input charge code and amount
-    // In real app, create a ChargeRequestComponent
-    const chargeCode = prompt('Enter charge code:');
-    const amount = parseFloat(prompt('Enter amount:') || '0');
-    if (chargeCode && amount) {
-      this.financialService.verifyChargeCode(chargeCode, account.id!, this.userId, amount).subscribe(success => {
-        if (success) {
-          alert('Charge request processed');
-          this.ngOnInit(); // Refresh accounts
-        } else {
-          alert('Invalid charge code');
-        }
-      });
-    }
+    console.log('Charge for', account);  
   }
 }

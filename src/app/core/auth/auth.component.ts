@@ -1,38 +1,43 @@
 
 // src/app/timesheet/auth/auth.component.ts
 
-
 import { Component, inject } from '@angular/core';
+import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatButtonModule } from '@angular/material/button';
 import { Router } from '@angular/router';
-import { FormsModule } from '@angular/forms';
+import { AuthService } from '../../core/services/auth.service'; 
 import { CommonModule } from '@angular/common';
-import { AuthService } from '../services/auth.service';
 
 @Component({
   selector: 'app-auth',
   standalone: true,
-  imports: [FormsModule, CommonModule],
-  templateUrl: './auth.component.html'
+  imports: [CommonModule, ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatButtonModule],
+  templateUrl: './auth.component.html',
 })
 export class AuthComponent {
-  private router = inject(Router);
-  private authService = inject(AuthService);
-  username = '';
-  password = '';
-  isLoading = false;
+  loginForm: FormGroup;
   error: string | null = null;
 
-  async onLogin() {
-    this.isLoading = true;
-    this.error = null;
-    try {
-      await this.authService.login(this.username, this.password);
-      this.router.navigate(['/']);
-    } catch (error) {
-      this.error = 'Login failed';
-      console.error(error);
-    } finally {
-      this.isLoading = false;
+  private fb = inject(FormBuilder);
+  private authService = inject(AuthService);
+  private router = inject(Router);
+
+  constructor() {
+    this.loginForm = this.fb.group({
+      username: ['', Validators.required],
+      password: ['', Validators.required]
+    });
+  }
+
+  onSubmit() {
+    if (this.loginForm.valid) {
+      const { username, password } = this.loginForm.value;
+      this.authService.signIn(username, password).subscribe({
+        next: () => this.router.navigate(['/start']),
+        error: (err) => (this.error = err.message)
+      });
     }
   }
 }

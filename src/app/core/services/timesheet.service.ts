@@ -1,266 +1,141 @@
 
 // src/app/core/services/timesheet.service.ts
 
-
-import { Timesheet, TimesheetEntry } from '../../core/models/timesheet.model';
-import { Injectable } from '@angular/core';
-import { v4 as uuidv4 } from 'uuid';
+import { Injectable, inject } from '@angular/core';
+import { generateClient } from 'aws-amplify/data';
+import type { Schema } from '@/amplify/data/resource';
+import { firstValueFrom } from 'rxjs';
+import { AuthService } from './auth.service';
 import { FinancialService } from './financial.service';
-import { Observable, from, of } from 'rxjs';
-import { map, mergeMap } from 'rxjs/operators';
-import { startOfDay, endOfWeek, differenceInHours, parse } from 'date-fns';
-import { Amplify } from 'aws-amplify';
-import { DataStore } from '@aws-amplify/datastore';
+import { Timesheet, TimesheetEntry } from '../models/timesheet.model';
+import { addDays, startOfWeek } from 'date-fns';
 
 @Injectable({
   providedIn: 'root'
 })
 export class TimesheetService {
-  constructor(private financialService: FinancialService) {
-    Amplify.configure({
-      API: {
-        GraphQL: {
-          endpoint: 'YOUR_AMPLIFY_API_ENDPOINT', // Replace after amplify push
-          region: 'YOUR_AWS_REGION', // e.g., 'us-east-1'
-          defaultAuthMode: 'AWS_IAM'
-        }
-      }
+  private client = generateClient<Schema>();
+  private authService = inject(AuthService);
+  private financialService = inject(FinancialService);
+
+  async createTimesheet(ts: Omit<Timesheet, 'id'>): Promise<Timesheet> {
+    const sub = await firstValueFrom(this.authService.getUserSub());
+    const { data } = await this.client.models.Timesheet.create({
+      data: { ...ts, owner: sub!, status: 'draft' },
     });
+    return data as Timesheet;
   }
 
-  async createTimesheet(): Promise<string> {
-    const id = uuidv4();
-    const timesheet = new Timesheet({
+  async listTimesheets(status?: 'draft' | 'submitted' | 'rejected'): Promise<Timesheet[]> {
+    const sub = await firstValueFrom(this.authService.getUserSub());
+    const query: any = { filter: { owner: { eq: sub } } };
+    if (status) query.filter.status = { eq: status };
+    const { data } = await this.client.models.Timesheet.list(query);
+    return data as Timesheet[];
+  }
+
+  async getTimesheetWithEntries(id: string): Promise<Timesheet & { entries: TimesheetEntry[] }> {
+    const { data: ts } = await this.client.models.Timesheet.get({ id });
+    const { data: entries } = await this.client.models.TimesheetEntry.list({
+      filter: { timesheetId: { eq: id } },
+    });
+    return { ...(ts as Timesheet), entries: entries as TimesheetEntry[] };
+  }
+
+  async addEntry(entry: Omit<TimesheetEntry, 'id'>, timesheetId: string): Promise<TimesheetEntry> {
+    const sub = await firstValueFrom(this.authService.getUserSub());
+    const fullEntry = { ...entry, owner: sub!, timesheetId };
+    // Daily/weekly validations (unchanged)
+    const { data: existing } = await this.client.models.TimesheetEntry.list({
+      filter: { timesheetId: { eq: timesheetId }, date: { eq: fullEntry.date } },
+    });
+    const dailyTotal = existing.reduce((sum: number, e: any) => sum + e.hours, 0) + fullEntry.hours;
+    if (dailyTotal > 8) throw new Error('Daily hours exceed 8');
+
+    const weekStart = startOfWeek(new Date(fullEntry.date)).toISOString().split('T')[0];
+    const weekEnd = addDays(new Date(weekStart), 6).toISOString().split('T')[0];
+    const { data: weekEntries } = await this.client.models.TimesheetEntry.list({
+      filter: { timesheetId: { eq: timesheetId }, date: { between: [weekStart, weekEnd] } },
+    });
+    const weeklyTotal = weekEntries.reduce((sum: number, e: any) => sum + e.hours, 0) + fullEntry.hours;
+    if (weeklyTotal > 40) throw new Error('Weekly hours exceed 40');
+
+    const groups = await firstValueFrom(this.authService.getUserGroups());
+    const group = `chargecode-${fullEntry.chargeCode}`;
+    if (!groups.includes(group)) throw new Error(`Access denied: Not in group ${group}`);
+
+    const { data } = await this.client.models.TimesheetEntry.create({ data: fullEntry });
+    await this.updateTotals(timesheetId);
+    return data as TimesheetEntry;
+  }
+
+  async submitTimesheet(id: string): Promise<Timesheet> {
+    const tsWithEntries = await this.getTimesheetWithEntries(id);
+    if (tsWithEntries.entries.length === 0) throw new Error('No entries');
+    const { data } = await this.client.models.Timesheet.update({
       id,
-      status: 'draft',
-      totalHours: 0,
-      totalCost: 0,
-      owner: 'user1'
+      data: { status: 'submitted' },
     });
-    await DataStore.save(timesheet);
-    return id;
+    return data as Timesheet;
   }
 
-  async getTimesheets(status?: string): Promise<Timesheet[]> {
-    const timesheets = await DataStore.query(Timesheet);
-    const filtered = status ? timesheets.filter(t => t.status === status) : timesheets;
-    return Promise.all(filtered.map(async timesheet => {
-      const entries = await DataStore.query(TimesheetEntry, e => e.timesheetId.eq(timesheet.id));
-      return {
-        ...timesheet,
-        entries: entries.filter(entry => {
-          const start = parse(`${entry.date} ${entry.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
-          const end = parse(`${entry.date} ${entry.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
-          if (end <= start) {
-            console.warn('Removing invalid timesheet entry:', { entry });
-            return false;
-          }
-          return true;
-        })
-      };
-    }));
-  }
+  async approveTimesheet(id: string): Promise<Timesheet> {
+    const groups = await firstValueFrom(this.authService.getUserGroups());
+    if (!groups.includes('Manager')) throw new Error('Manager access required');
+    const tsWithEntries = await this.getTimesheetWithEntries(id);
+    if (tsWithEntries.status !== 'submitted') throw new Error('Only submitted timesheets can be approved');
 
-  async addEntry(entry: Omit<TimesheetEntry, 'id'>): Promise<void> {
-    const timesheet = await DataStore.query(Timesheet, entry.timesheetId);
-    if (!timesheet) throw new Error('Timesheet not found');
-
-    const start = parse(`${entry.date} ${entry.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
-    const end = parse(`${entry.date} ${entry.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
-    const hours = differenceInHours(end, start);
-
-    if (hours <= 0) {
-      throw new Error('End time must be after start time');
-    }
-
-    const newEntry = new TimesheetEntry({
-      id: uuidv4(),
-      timesheetId: entry.timesheetId,
-      date: entry.date,
-      startTime: entry.startTime,
-      endTime: entry.endTime,
-      hours,
-      description: entry.description,
-      accountId: entry.accountId
-    });
-
-    const entries = await DataStore.query(TimesheetEntry, e => e.timesheetId.eq(timesheet.id));
-    const updatedEntries = [...entries, newEntry];
-    const totalHours = updatedEntries.reduce((sum: number, e: TimesheetEntry) => sum + e.hours, 0);
-
-    const validationErrors = await this.validateHours(timesheet, updatedEntries);
-    if (validationErrors.length > 0) {
-      throw new Error(validationErrors.join('\n'));
-    }
-
-    await DataStore.save(newEntry);
-    await DataStore.save(Timesheet.copyOf(timesheet, updated => {
-      updated.totalHours = totalHours;
-    }));
-  }
-
-  async updateEntry(entry: TimesheetEntry): Promise<void> {
-    const timesheet = await DataStore.query(Timesheet, entry.timesheetId);
-    if (!timesheet) throw new Error('Timesheet not found');
-    const existingEntry = await DataStore.query(TimesheetEntry, entry.id);
-    if (!existingEntry) throw new Error('Entry not found');
-
-    const start = parse(`${entry.date} ${entry.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
-    const end = parse(`${entry.date} ${entry.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
-    const hours = differenceInHours(end, start);
-
-    if (hours <= 0) {
-      throw new Error('End time must be after start time');
-    }
-
-    const updatedEntry = TimesheetEntry.copyOf(existingEntry, updated => {
-      updated.date = entry.date;
-      updated.startTime = entry.startTime;
-      updated.endTime = entry.endTime;
-      updated.hours = hours;
-      updated.description = entry.description;
-      updated.accountId = entry.accountId;
-    });
-
-    const entries = await DataStore.query(TimesheetEntry, e => e.timesheetId.eq(timesheet.id));
-    const updatedEntries = entries.map(e => e.id === entry.id ? updatedEntry : e);
-    const totalHours = updatedEntries.reduce((sum: number, e: TimesheetEntry) => sum + e.hours, 0);
-
-    const validationErrors = await this.validateHours(timesheet, updatedEntries);
-    if (validationErrors.length > 0) {
-      throw new Error(validationErrors.join('\n'));
-    }
-
-    await DataStore.save(updatedEntry);
-    await DataStore.save(Timesheet.copyOf(timesheet, updated => {
-      updated.totalHours = totalHours;
-    }));
-  }
-
-  async submitTimesheet(timesheetId: string): Promise<void> {
-    const timesheet = await DataStore.query(Timesheet, timesheetId);
-    if (!timesheet) throw new Error('Timesheet not found');
-    await DataStore.save(Timesheet.copyOf(timesheet, updated => {
-      updated.status = 'submitted';
-    }));
-  }
-
-  async approveTimesheet(timesheetId: string, entries: TimesheetEntry[]): Promise<void> {
-    const timesheet = await DataStore.query(Timesheet, timesheetId);
-    if (!timesheet) throw new Error('Timesheet not found');
-
-    const filteredEntries = await Promise.all(entries.map(async entry => {
-      const start = parse(`${entry.date} ${entry.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
-      const end = parse(`${entry.date} ${entry.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
-      if (end <= start) {
-        console.warn('Removing invalid timesheet entry:', { entry });
-        return null;
-      }
-      const existingEntry = await DataStore.query(TimesheetEntry, entry.id);
-      if (!existingEntry) return null;
-      return TimesheetEntry.copyOf(existingEntry, updated => {
-        updated.date = entry.date;
-        updated.startTime = entry.startTime;
-        updated.endTime = entry.endTime;
-        updated.hours = entry.hours;
-        updated.description = entry.description;
-        updated.accountId = entry.accountId;
+    const user = await this.financialService.getUserById(tsWithEntries.owner);
+    let totalCost = 0;
+    for (const entry of tsWithEntries.entries) {
+      const { data: accounts } = await this.client.models.Account.list({
+        filter: { accountNumber: { eq: entry.chargeCode } },
       });
-    }));
+      if (accounts.length === 0) throw new Error(`Account not found for ${entry.chargeCode}`);
+      const account = accounts[0] as any;
+      const amount = entry.hours * user.rate;  // User rate
+      totalCost += amount;
 
-    const validEntries = filteredEntries.filter(entry => entry !== null) as TimesheetEntry[];
-    const totalHours = validEntries.reduce((sum: number, e: TimesheetEntry) => sum + e.hours, 0);
+      await this.client.models.Transaction.create({
+        data: {
+          accountId: account.id,
+          amount,
+          debit: true,
+          date: new Date().toISOString().split('T')[0],
+          description: `Approved timesheet: ${entry.description}`,
+          runningBalance: account.balance - amount,
+        },
+      });
 
-    await Promise.all(validEntries.map(entry => DataStore.save(entry)));
-    await DataStore.save(Timesheet.copyOf(timesheet, updated => {
-      updated.status = 'approved';
-      updated.totalHours = totalHours;
-    }));
-  }
-
-  async rejectTimesheet(timesheetId: string, rejectionReason: string): Promise<void> {
-    const timesheet = await DataStore.query(Timesheet, timesheetId);
-    if (!timesheet) throw new Error('Timesheet not found');
-    await DataStore.save(Timesheet.copyOf(timesheet, updated => {
-      updated.status = 'rejected';
-      updated.rejectionReason = rejectionReason;
-    }));
-  }
-
-  async getAccounts(): Promise<FinancialAccount[]> {
-    try {
-      const accounts = await this.financialService.getAccounts(1).toPromise();
-      return accounts;
-    } catch (error) {
-      console.error('Failed to fetch accounts:', error);
-      return [];
-    }
-  }
-
-  async getAccountName(accountId: number): Promise<string> {
-    return this.financialService.getAccountName(accountId);
-  }
-
-  async validateHours(timesheet: Timesheet, entries?: TimesheetEntry[]): Promise<string[]> {
-    const errors: string[] = [];
-    const targetEntries = entries ?? await DataStore.query(TimesheetEntry, e => e.timesheetId.eq(timesheet.id));
-
-    const entriesByDate = targetEntries.reduce((acc: Record<string, TimesheetEntry[]>, entry) => {
-      const date = entry.date;
-      if (!acc[date]) acc[date] = [];
-      acc[date].push(entry);
-      return acc;
-    }, {});
-
-    Object.entries(entriesByDate).forEach(([date, entries]) => {
-      const totalHours = entries.reduce((sum: number, e: TimesheetEntry) => sum + e.hours, 0);
-      if (totalHours !== 8) {
-        errors.push(`Date ${date} has ${totalHours} hours, expected 8 hours.`);
-      }
-    });
-
-    const weekStart = startOfDay(targetEntries[0]?.date ? parse(targetEntries[0].date, 'yyyy-MM-dd', new Date()) : new Date());
-    const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
-    const weeklyEntries = targetEntries.filter(e => {
-      const entryDate = parse(e.date, 'yyyy-MM-dd', new Date());
-      return entryDate >= weekStart && entryDate <= weekEnd;
-    });
-    const weeklyHours = weeklyEntries.reduce((sum: number, e: TimesheetEntry) => sum + e.hours, 0);
-    if (weeklyHours !== 40) {
-      errors.push(`Week starting ${weekStart.toISOString().split('T')[0]} has ${weeklyHours} hours, expected 40 hours.`);
+      await this.client.models.Account.update({
+        id: account.id,
+        data: { balance: account.balance - amount },
+      });
     }
 
-    return errors;
+    const { data } = await this.client.models.Timesheet.update({
+      id,
+      data: { status: 'approved', totalCost },
+    });
+    return data as Timesheet;
   }
 
-  getDailySubtotals(timesheetId: string): Observable<{ date: string, accountId: number, accountName: string, hours: number }[]> {
-    return from(DataStore.query(Timesheet, timesheetId)).pipe(
-      map(timesheet => {
-        if (!timesheet) return [];
-        return from(DataStore.query(TimesheetEntry, e => e.timesheetId.eq(timesheet.id))).pipe(
-          map(entries => {
-            const subtotals = entries.reduce((acc: Record<string, { date: string, accountId: number, accountName: string, hours: number }>, entry) => {
-              const key = `${entry.date}:${entry.accountId}`;
-              if (!acc[key]) {
-                acc[key] = { date: entry.date, accountId: entry.accountId, accountName: '', hours: 0 };
-              }
-              acc[key].hours += entry.hours;
-              return acc;
-            }, {});
-            return this.financialService.getAccounts(1).pipe(
-              map(accounts => {
-                const accountMap = new Map(accounts.map(a => [a.id, a.name]));
-                return Object.values(subtotals).map(subtotal => ({
-                  ...subtotal,
-                  accountName: accountMap.get(subtotal.accountId) || 'Unknown'
-                }));
-              })
-            );
-          }),
-          mergeMap(obs => obs)
-        );
-      }),
-      mergeMap(obs => obs)
-    );
+  async rejectTimesheet(id: string, reason: string): Promise<Timesheet> {
+    const groups = await firstValueFrom(this.authService.getUserGroups());
+    if (!groups.includes('Manager')) throw new Error('Manager access required');
+    const { data } = await this.client.models.Timesheet.update({
+      id,
+      data: { status: 'rejected', rejectionReason: reason },
+    });
+    return data as Timesheet;
+  }
+
+  private async updateTotals(id: string): Promise<void> {
+    const tsWithEntries = await this.getTimesheetWithEntries(id);
+    const totalHours = tsWithEntries.entries.reduce((sum, e) => sum + e.hours, 0);
+    await this.client.models.Timesheet.update({
+      id,
+      data: { totalHours },
+    });
   }
 }

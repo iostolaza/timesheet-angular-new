@@ -45,3 +45,8 @@ Thumbs.db
 .amplify
 amplify_outputs*
 amplifyconfiguration*
+
+
+terminalcommand.md
+
+.env

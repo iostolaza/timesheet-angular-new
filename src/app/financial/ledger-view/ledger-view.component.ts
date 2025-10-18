@@ -1,51 +1,43 @@
 
-// src/financial/ledger-view/ledger-view.component.ts
+// src/app/financial/ledger-view/ledger-view.component.ts
 
-import { Component, OnInit } from '@angular/core';
-import { MatTableDataSource, MatTableModule } from '@angular/material/table';
-import { CommonModule } from '@angular/common';
+import { Component, inject, OnInit } from '@angular/core';
+import { MatTableModule } from '@angular/material/table';
+import { CommonModule, DatePipe } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
-import { FinancialService } from '../../app/core/services/financial.service';
-import { Account, Transaction } from '../../app/core/models/financial.model';
-import { DatePipe } from '@angular/common';
-
+import { FinancialService } from '../../core/services/financial.service';
+import { Transaction, Account } from '../../core/models/financial.model';
 
 @Component({
   selector: 'app-ledger-view',
   standalone: true,
-  imports: [MatTableModule, CommonModule],
-  providers: [DatePipe],
-  templateUrl: './ledger-view.component.html'
+  imports: [CommonModule, MatTableModule, DatePipe],
+  templateUrl: './ledger-view.component.html',
 })
 export class LedgerViewComponent implements OnInit {
+  displayedColumns: string[] = ['date', 'ref', 'description', 'debit', 'credit', 'running'];
+  dataSource: Transaction[] = [];
   account: Account | null = null;
-  entriesDataSource = new MatTableDataSource<Transaction>();
-  displayedColumns: string[] = [];
-  private accountId: number | undefined = undefined;
+  private financialService = inject(FinancialService);
+  private route = inject(ActivatedRoute);
 
-  constructor(
-    private route: ActivatedRoute,
-    private financialService: FinancialService
-  ) {}
-
-  ngOnInit() {
-    this.accountId = this.route.snapshot.paramMap.get('id') ? +this.route.snapshot.paramMap.get('id')! : undefined;
-    this.displayedColumns = this.accountId
-      ? ['date', 'ref', 'description', 'debit', 'credit', 'running']
-      : ['account_name', 'date', 'ref', 'description', 'debit', 'credit', 'running'];
-
-    if (this.accountId) {
-      this.financialService.getAccount(this.accountId).subscribe(account => {
-        this.account = account;
-      });
+  async ngOnInit() {
+    const id = this.route.snapshot.paramMap.get('id');
+    if (id) {
+      this.account = await this.getAccountById(id);
+      this.dataSource = await this.financialService.listTransactions({ accountId: id });
+    } else {
+      this.dataSource = await this.financialService.listTransactions();
+      this.displayedColumns.unshift('account_name');
     }
-
-    this.financialService.getTransactions(this.accountId).subscribe(({ entries }) => {
-      this.entriesDataSource.data = entries;
-    });
   }
 
-  getAccountName(accountId: number): string {
-    return this.financialService.getAccountName(accountId);
+  getAccountName(accountId: string): string {
+    return 'Account Name';  // Stub
+  }
+
+  private async getAccountById(id: string): Promise<Account> {
+    const accounts = await this.financialService.listAccounts();
+    return accounts.find(a => a.id === id)!;
   }
 }
