@@ -1,17 +1,16 @@
-
 // src/app/app.ts
 
 import { Component, OnInit, signal } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { AuthService } from './core/services/auth.service';
 import { Router } from '@angular/router';
-import { CommonModule } from '@angular/common';  // For *ngIf if needed
+import { CommonModule } from '@angular/common';
 
 @Component({
   selector: 'app-root',
   standalone: true,
   imports: [CommonModule, RouterOutlet],
-  template: './app.html',  // Simplified
+  templateUrl: './app.html',
   styleUrl: './app.scss',
 })
 export class AppComponent implements OnInit {
@@ -28,3 +27,5 @@ export class AppComponent implements OnInit {
     });
   }
 }
+
+export { AppComponent as App };  // For main.ts import

@@ -11,14 +11,15 @@ import { auth } from '../auth/resource.js';
 const schema = a.schema({
   User: a
     .model({
-      id: a.string().required(),  // Cognito sub
+      id: a.string().required(),
+      email: a.string().required(),
       name: a.string().required(),
       role: a.enum(['Employee', 'Manager', 'Admin']),
-      rate: a.float().required(),  // Hourly rate per user
+      rate: a.float().required(),
     })
     .authorization((allow) => [
-      allow.ownerDefinedIn('id').to(['read', 'update']),  // Custom owner on 'id' field (matches Cognito sub)
-      allow.authenticated().to(['read']),
+      allow.ownerDefinedIn('id').to(['create', 'read', 'update', 'delete']),
+      allow.authenticated().to(['create', 'read', 'update']),
     ]),
   Account: a
     .model({
@@ -26,24 +27,24 @@ const schema = a.schema({
       name: a.string().required(),
       details: a.string(),
       balance: a.float().required(),
-      startingBalance: a.float(),  // Optional (no .required())
+      startingBalance: a.float(),
       endingBalance: a.float(),
       date: a.string().required(),
       type: a.enum(['Asset', 'Liability', 'Equity', 'Revenue', 'Expense']),
-      rate: a.float().required(),  // Fallback if user rate not used
+      rate: a.float().required(),
       chargeCodes: a.string().array(),
       transactions: a.hasMany('Transaction', 'accountId'),
     })
     .authorization((allow) => [
-      allow.authenticated().to(['read']),
-      allow.groups(['Admin']).to(['create', 'update', 'delete']),
+      allow.authenticated().to(['create', 'read', 'update']),
+      allow.groups(['Admin']).to(['create', 'read', 'update', 'delete']),
     ]),
   Transaction: a
     .model({
       accountId: a.id().required(),
-      fromAccountId: a.id(),  // Single, no duplicate
+      fromAccountId: a.id(),
       fromName: a.string(),
-      amount: a.float().required(),  // Fixed: removed invalid 'multiple:'
+      amount: a.float().required(),
       debit: a.boolean().required(),
       date: a.string().required(),
       description: a.string().required(),
@@ -52,22 +53,26 @@ const schema = a.schema({
     })
     .authorization((allow) => [
       allow.authenticated().to(['read', 'create', 'update', 'delete']),
+      allow.groups(['Admin']).to(['create', 'read', 'update', 'delete']),
     ]),
   Timesheet: a
     .model({
+      id: a.id().required(),  // Explicit for models
       status: a.enum(['draft', 'submitted', 'approved', 'rejected']),
       totalHours: a.float().required(),
       totalCost: a.float(),
       owner: a.string().required(),
-      rejectionReason: a.string(),
+      rejectionReason: a.string(),  // Fixed typo
       entries: a.hasMany('TimesheetEntry', 'timesheetId'),
     })
     .authorization((allow) => [
-      allow.owner().to(['read', 'update', 'delete']),  // Standard 'owner' field
-      allow.authenticated().to(['read']),
+      allow.owner().to(['create', 'read', 'update', 'delete']),
+      allow.authenticated().to(['create', 'read', 'update']),
+      allow.groups(['Admin']).to(['create', 'read', 'update', 'delete']),
     ]),
   TimesheetEntry: a
     .model({
+      id: a.id().required(),  // Explicit
       timesheetId: a.id().required(),
       date: a.string().required(),
       startTime: a.string().required(),
@@ -79,7 +84,9 @@ const schema = a.schema({
       timesheet: a.belongsTo('Timesheet', 'timesheetId'),
     })
     .authorization((allow) => [
-      allow.owner().to(['read', 'update', 'delete']),  // Standard 'owner' field
+      allow.owner().to(['create', 'read', 'update', 'delete']),
+      allow.authenticated().to(['create', 'read', 'update']),
+      allow.groups(['Admin']).to(['create', 'read', 'update', 'delete']),
     ]),
 });
 
@@ -90,7 +97,6 @@ export const data = defineData({
   },
 });
 
-// Explicit export for frontend typing (resolves import/index signature issues)
 export type Schema = typeof schema;
 
 /*== STEP 2 & 3 snippets unchanged ==*/

@@ -1,4 +1,5 @@
 
+// src/app/timesheet/calendar-view/calendar.component.ts
 
 import { Component, inject, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -6,9 +7,8 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import {
-  CalendarMonthViewComponent,  // Direct import for standalone
   CalendarEvent,
-  MonthViewDay,  // For typing dayClicked
+  CalendarModule,
 } from 'angular-calendar';
 import { Subject } from 'rxjs';
 import { firstValueFrom } from 'rxjs';
@@ -20,14 +20,14 @@ import { DayEntryDialogComponent } from './day-entry-dialog.component';
 @Component({
   selector: 'app-calendar',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, MatDialogModule, MatButtonModule, CalendarMonthViewComponent],
+  imports: [CommonModule, ReactiveFormsModule, MatDialogModule, MatButtonModule, CalendarModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './calendar.component.html',
 })
 export class CalendarComponent implements OnInit {
   viewDate: Date = new Date();
   events: CalendarEvent[] = [];
-  refresh = new Subject<void>();  // For re-renders
+  refresh = new Subject<void>();
   private tsService = inject(TimesheetService);
   private authService = inject(AuthService);
   private dialog = inject(MatDialog);
@@ -53,15 +53,15 @@ export class CalendarComponent implements OnInit {
         color: { primary: '#00B0FF', secondary: '#00B0FF' },
         meta: { entry },
       }));
-      this.refresh.next();  // Trigger re-render
+      this.refresh.next();
       this.cdr.markForCheck();
     } catch (error) {
       console.error('Failed to load events:', error);
     }
   }
 
-  async handleDayClick(event: { day: MonthViewDay }): Promise<void> {  // Typed event
-    const date = event.day.date;  // Access .date
+  async handleDayClick(event: { day: any }): Promise<void> {
+    const date = event.day.date;
     const dialogRef = this.dialog.open(DayEntryDialogComponent, {
       data: { date: date.toISOString().split('T')[0], timesheetId: this.currentTimesheetId },
     });
@@ -83,3 +83,4 @@ export class CalendarComponent implements OnInit {
     return (eh * 60 + em - sh * 60 - sm) / 60;
   }
 }
+

@@ -4,13 +4,16 @@ import { Injectable } from '@angular/core';
 import { Amplify } from 'aws-amplify';
 import { signIn, signOut, fetchAuthSession } from 'aws-amplify/auth';
 import { Hub } from 'aws-amplify/utils';
+import { generateClient } from 'aws-amplify/data';
+import type { Schema } from '../../../../amplify/data/resource';
 import { Observable, from, BehaviorSubject, throwError, of } from 'rxjs';
 import { map, catchError, switchMap, filter } from 'rxjs/operators';
 import outputs from '../../../../amplify_outputs.json';
+import { User } from '../models/financial.model';
 
 interface CognitoUser {
   sub: string;
-  username: string;
+  email: string;
   groups: string[];
 }
 
@@ -29,6 +32,7 @@ interface HubPayload {
 })
 export class AuthService {
   private userSubject = new BehaviorSubject<CognitoUser | null>(null);
+  private client = generateClient<Schema>();
 
   constructor() {
     Amplify.configure(outputs);
@@ -40,7 +44,7 @@ export class AuthService {
         if (sub) {
           this.userSubject.next({
             sub,
-            username: ((payloadData['cognito:username'] || payloadData['preferred_username'] || data.username || '') as string),
+            email: ((payloadData['email'] || payloadData['cognito:username'] || payloadData['preferred_username'] || data.username || '') as string),
             groups: Array.isArray(payloadData['cognito:groups']) ? payloadData['cognito:groups'] as string[] : [],
           });
         }
@@ -77,7 +81,7 @@ export class AuthService {
         if (!sub) return null;
         return {
           sub,
-          username: ((payload['cognito:username'] || payload['preferred_username'] || '') as string),
+          email: ((payload['email'] || payload['cognito:username'] || payload['preferred_username'] || '') as string),
           groups: Array.isArray(payload['cognito:groups']) ? payload['cognito:groups'] as string[] : [],
         };
       }),
@@ -85,8 +89,19 @@ export class AuthService {
     );
   }
 
+async getUserById(id: string): Promise<User> {
+    const model = (this.client.models as any)['User'];
+    const { data } = await model.get({ id });
+    if (!data) throw new Error(`User with id ${id} not found`);
+    return data as User;
+  }
+
   getUserSub(): Observable<string | null> {
     return this.userSubject.asObservable().pipe(map((user) => user?.sub || null));
+  }
+
+  getUserEmail(): Observable<string | null> {
+    return this.userSubject.asObservable().pipe(map((user) => user?.email || null));
   }
 
   getUserGroups(): Observable<string[]> {
