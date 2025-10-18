@@ -1,3 +1,4 @@
+
 // src/app/core/services/auth.service.ts
 
 import { Injectable } from '@angular/core';
@@ -6,7 +7,7 @@ import { signIn, signOut, fetchAuthSession } from 'aws-amplify/auth';
 import { Hub } from 'aws-amplify/utils';
 import { generateClient } from 'aws-amplify/data';
 import type { Schema } from '../../../../amplify/data/resource';
-import { Observable, from, BehaviorSubject, throwError, of } from 'rxjs';
+import { Observable, from, BehaviorSubject, throwError, of, retry, delay } from 'rxjs';
 import { map, catchError, switchMap, filter } from 'rxjs/operators';
 import outputs from '../../../../amplify_outputs.json';
 import { User } from '../models/financial.model';
@@ -74,22 +75,28 @@ export class AuthService {
 
   getCurrentUser(): Observable<CognitoUser | null> {
     return from(fetchAuthSession()).pipe(
+      retry({ count: 3, delay: 100 }),  // Retry for session lag per Amplify docs
       map((session) => {
         if (!session.tokens?.idToken?.payload) return null;
         const payload = session.tokens.idToken.payload as Record<string, unknown>;
         const sub = payload['sub'] as string;
         if (!sub) return null;
-        return {
+        const user = {
           sub,
           email: ((payload['email'] || payload['cognito:username'] || payload['preferred_username'] || '') as string),
           groups: Array.isArray(payload['cognito:groups']) ? payload['cognito:groups'] as string[] : [],
         };
+        console.log('getCurrentUser success:', user);  // Debug log
+        return user;
       }),
-      catchError(() => of(null))
+      catchError((error) => {
+        console.error('getCurrentUser error:', error);  // Debug log
+        return of(null);
+      })
     );
   }
 
-async getUserById(id: string): Promise<User> {
+  async getUserById(id: string): Promise<User> {
     const model = (this.client.models as any)['User'];
     const { data } = await model.get({ id });
     if (!data) throw new Error(`User with id ${id} not found`);
