@@ -1,6 +1,6 @@
 
-
 // src/app/timesheet/calendar-view/calendar.component.ts
+
 import {
   Component,
   inject,
@@ -13,6 +13,7 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { FullCalendarModule } from '@fullcalendar/angular';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
@@ -22,9 +23,11 @@ import { Router } from '@angular/router';
 import { TimesheetService } from '../../core/services/timesheet.service';
 import { AuthService } from '../../core/services/auth.service';
 import { TimesheetEntry } from '../../core/models/timesheet.model';
+import { DayEntryDialogComponent } from './day-entry-dialog.component';
+import { ChargeCodeDialogComponent } from './charge-code-dialog.component';
 import { format, startOfWeek, endOfWeek } from 'date-fns';
 
-interface ChargeCode {
+export interface ChargeCode {
   id: string;
   name: string;
   linkedAccount: string;
@@ -41,6 +44,7 @@ interface ChargeCode {
     MatButtonModule,
     MatIconModule,
     MatSnackBarModule,
+    MatDialogModule,
     FullCalendarModule,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -59,6 +63,7 @@ export class CalendarComponent implements OnInit {
   private tsService = inject(TimesheetService);
   private authService = inject(AuthService);
   private snackBar = inject(MatSnackBar);
+  private dialog = inject(MatDialog);
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
 
@@ -86,17 +91,16 @@ export class CalendarComponent implements OnInit {
       right: 'timeGridWeek,timeGridDay,dayGridMonth',
     },
     select: this.handleSelect.bind(this),
+    eventClick: this.handleEventClick.bind(this),
     eventDrop: this.handleEventDrop.bind(this),
     eventResize: this.handleEventResize.bind(this),
   };
 
   async ngOnInit() {
-    // ✅ get current user
     this.authService.getCurrentUser().subscribe(user => {
       if (user) this.userName = user.name;
     });
 
-    // ✅ calculate current week range
     const start = startOfWeek(this.today, { weekStartsOn: 0 });
     const end = endOfWeek(this.today, { weekStartsOn: 0 });
     this.weekRange = `${format(start, 'MMM d')} – ${format(end, 'd, yyyy')}`;
@@ -144,7 +148,6 @@ export class CalendarComponent implements OnInit {
     return (end.getTime() - start.getTime()) / (1000 * 60 * 60);
   }
 
-  /** ✅ Drag to create new entry (no dialog) */
   async handleSelect(info: any) {
     const startDate = new Date(info.start);
     const endDate = new Date(info.end);
@@ -153,9 +156,9 @@ export class CalendarComponent implements OnInit {
     const dateStr = startDate.toISOString().split('T')[0];
     const hours = this.computeHoursDiff(startDate, endDate);
 
-    // Temporary event for visual feedback
+    const tmpEventId = `tmp-${Date.now()}`;
     const tmpEvent = {
-      id: `tmp-${Date.now()}`,
+      id: tmpEventId,
       title: `New Entry: ${hours.toFixed(2)}h`,
       start: startDate,
       end: endDate,
@@ -177,9 +180,43 @@ export class CalendarComponent implements OnInit {
       chargeCode: 'Unassigned',
       description: 'Auto-created via drag',
     };
-    await this.tsService.addEntry(entryData, this.currentTimesheetId);
-    await this.loadEvents();
+    try {
+      await this.tsService.addEntry(entryData, this.currentTimesheetId);
+      await this.loadEvents();
+      this.snackBar.open('Entry created. Click to edit charge code and comment.', 'OK', { duration: 3000 });
+    } catch (error: any) {
+      // Rollback temporary event on error
+      this.events = this.events.filter(e => e.id !== tmpEventId);
+      this.snackBar.open(error.message || 'Failed to create entry', 'OK', { duration: 5000 });
+      this.cdr.markForCheck();
+    }
+
     info.view.calendar.unselect();
+  }
+
+  handleEventClick(info: any) {
+    const entry = info.event.extendedProps.entry;
+    if (!entry || info.event.extendedProps.tmp) return; // Skip temp events
+
+    const dialogRef = this.dialog.open(DayEntryDialogComponent, {
+      width: '400px',
+      data: {
+        entry,
+        availableChargeCodes: this.chargeCodes.filter(c => c.active),
+      },
+    });
+
+    dialogRef.afterClosed().subscribe(async (updatedEntry: TimesheetEntry | undefined) => {
+      if (updatedEntry) {
+        try {
+          await this.tsService.updateEntry(updatedEntry, this.currentTimesheetId);
+          await this.loadEvents();
+          this.snackBar.open('Entry updated successfully.', 'OK', { duration: 2000 });
+        } catch (error: any) {
+          this.snackBar.open(error.message || 'Failed to update entry', 'OK', { duration: 5000 });
+        }
+      }
+    });
   }
 
   async handleEventDrop(info: any) {
@@ -254,11 +291,21 @@ export class CalendarComponent implements OnInit {
   }
 
   openChargeCodeDialog() {
-  // simple placeholder for now (can later open Angular Material dialog)
-  this.snackBar.open('Charge code dialog coming soon', 'OK', { duration: 3000 });
-}
+    const dialogRef = this.dialog.open(ChargeCodeDialogComponent, {
+      width: '500px',
+      data: { chargeCodes: this.chargeCodes },
+    });
 
-isValid(): boolean {
-  return !this.validationMessage; // true if no validation message set
-}
+    dialogRef.afterClosed().subscribe((result: ChargeCode[] | undefined) => {
+      if (result) {
+        this.chargeCodes = result;
+        this.snackBar.open('Charge codes updated.', 'OK', { duration: 2000 });
+        this.cdr.markForCheck();
+      }
+    });
+  }
+
+  isValid(): boolean {
+    return !this.validationMessage; // true if no validation message set
+  }
 }

@@ -1,22 +1,33 @@
 
 <!-- src/app/timesheet/calendar-view/day-entry-dialog.component.html -->
 
-<!-- <h2 mat-dialog-title>Entries for {{data.date}}</h2>
-<mat-dialog-content>
-  <form [formGroup]="form">
-    <div formArrayName="entries">
-      <div *ngFor="let entry of entries.controls; let i = index" [formGroupName]="i" class="mb-4 p-4 border rounded">
-        <input formControlName="startTime" placeholder="Start (HH:MM)" class="border p-2 mr-2" required>
-        <input formControlName="endTime" placeholder="End (HH:MM)" class="border p-2 mr-2" required>
-        <input formControlName="description" placeholder="Description" class="border p-2 mr-2" required>
-        <input formControlName="chargeCode" placeholder="Charge Code" class="border p-2 mr-2" required>
-        <button type="button" mat-button color="warn" (click)="removeEntry(i)">Remove</button>
-      </div>
-    </div>
-    <button type="button" mat-raised-button (click)="addEntry()">Add Entry</button>
+<h2 mat-dialog-title>Edit Day Entry</h2>
+<mat-dialog-content class="max-h-96 overflow-y-auto p-4">
+  <form [formGroup]="form" class="space-y-4">
+    <mat-form-field appearance="outline" class="w-full">
+      <mat-label>Charge Code</mat-label>
+      <mat-select formControlName="chargeCode" required>
+        <mat-option *ngFor="let code of data.availableChargeCodes" [value]="code.name">
+          {{ code.name }} ({{ code.linkedAccount }})
+        </mat-option>
+      </mat-select>
+      <mat-error *ngIf="form.get('chargeCode')?.hasError('required')">
+        Charge code is required
+      </mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="w-full">
+      <mat-label>Comment</mat-label>
+      <textarea matInput formControlName="description" rows="3" required></textarea>
+      <mat-error *ngIf="form.get('description')?.hasError('required')">
+        Comment is required
+      </mat-error>
+    </mat-form-field>
   </form>
 </mat-dialog-content>
-<mat-dialog-actions>
-  <button mat-button (click)="dialogRef.close()">Cancel</button>
-  <button mat-raised-button color="primary" [disabled]="form.invalid" (click)="save()">Save</button>
-</mat-dialog-actions> -->
+<mat-dialog-actions class="p-4 bg-gray-50 border-t">
+  <button mat-button class="mr-2" (click)="dialogRef.close()">Cancel</button>
+  <button mat-raised-button color="primary" (click)="save()" [disabled]="form.invalid">
+    Save
+  </button>
+</mat-dialog-actions>
