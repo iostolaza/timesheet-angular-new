@@ -7,7 +7,7 @@ import { signIn, signOut, signUp, fetchAuthSession, confirmSignUp, confirmSignIn
 import { Hub } from 'aws-amplify/utils';
 import { generateClient } from 'aws-amplify/data';
 import type { Schema } from '../../../../amplify/data/resource';
-import { Observable, from, BehaviorSubject, throwError, of, retry, delay, timeout, catchError } from 'rxjs';
+import { Observable, from, BehaviorSubject, throwError, of, retry, delay, catchError, firstValueFrom, timeout } from 'rxjs';
 import { map, switchMap, filter } from 'rxjs/operators';
 import outputs from '../../../../amplify_outputs.json';
 import { User } from '../models/financial.model';
@@ -35,6 +35,7 @@ export class AuthService {
   private client = generateClient<Schema>();
   private cognitoClient: CognitoIdentityProviderClient;
   private userPoolId: string;
+  private isInitialized = false;
 
   constructor() {
     Amplify.configure(outputs);
@@ -43,6 +44,10 @@ export class AuthService {
     this.cognitoClient = new CognitoIdentityProviderClient({ 
       region: 'us-east-1' // Hardcoded default; adjust if multi-region
     });
+
+    // Initialize user on construction to avoid multiple calls
+    this.initializeUser();
+
     Hub.listen('auth', ({ payload }: { payload: HubPayload }) => {
       const { event, data } = payload;
       if (event === 'signedIn' && data?.tokens?.idToken?.payload) {
@@ -62,9 +67,21 @@ export class AuthService {
         }
       } else if (event === 'signedOut') {
         this.userSubject.next(null);
+        this.isInitialized = false; // Reset for next sign-in
       }
     });
-    this.getCurrentUser().subscribe((user) => this.userSubject.next(user));
+  }
+
+  private async initializeUser() {
+    if (this.isInitialized) return;
+    this.isInitialized = true;
+    try {
+      const user = await firstValueFrom(this.getCurrentUser());
+      this.userSubject.next(user);
+    } catch (error) {
+      console.error('AuthService initializeUser error:', error);
+      this.userSubject.next(null);
+    }
   }
 
   private deriveRoleFromGroups(groups: string[]): 'Employee' | 'Manager' | 'Admin' {
@@ -121,6 +138,7 @@ export class AuthService {
     return from(signOut()).pipe(
       map(() => {
         this.userSubject.next(null);
+        this.isInitialized = false;
         return undefined;
       }),
       catchError((error) => throwError(() => new Error(`Sign-out failed: ${error.message}`)))
@@ -128,28 +146,33 @@ export class AuthService {
   }
 
   getCurrentUser(): Observable<User | null> {
-    return from(fetchAuthSession()).pipe(
-      retry({ count: 3, delay: 100 }),
-      map((session) => {
-        if (!session.tokens?.idToken?.payload) return null;
-        const payload = session.tokens.idToken.payload as Record<string, unknown>;
-        const sub = payload['sub'] as string;
-        if (!sub) return null;
-        const groups = Array.isArray(payload['cognito:groups']) ? payload['cognito:groups'] as string[] : [];
-        const user: User = {
-          id: sub,
-          email: ((payload['email'] || payload['cognito:username'] || payload['preferred_username'] || '') as string),
-          name: 'Default User',
-          role: this.deriveRoleFromGroups(groups),
-          rate: 25.0,
-          groups,
-        };
-        console.log('getCurrentUser success:', user);
-        return user;
-      }),
-      catchError((error) => {
-        console.error('getCurrentUser error:', error);
-        return of(null);
+    return this.userSubject.asObservable().pipe(
+      switchMap((cachedUser) => {
+        if (cachedUser) return of(cachedUser);
+        return from(fetchAuthSession()).pipe(
+          retry({ count: 3, delay: 100 }),
+          map((session) => {
+            if (!session.tokens?.idToken?.payload) return null;
+            const payload = session.tokens.idToken.payload as Record<string, unknown>;
+            const sub = payload['sub'] as string;
+            if (!sub) return null;
+            const groups = Array.isArray(payload['cognito:groups']) ? payload['cognito:groups'] as string[] : [];
+            const user: User = {
+              id: sub,
+              email: ((payload['email'] || payload['cognito:username'] || payload['preferred_username'] || '') as string),
+              name: 'Default User',
+              role: this.deriveRoleFromGroups(groups),
+              rate: 25.0,
+              groups,
+            };
+            console.log('getCurrentUser success:', user);
+            return user;
+          }),
+          catchError((error) => {
+            console.error('getCurrentUser error:', error);
+            return of(null);
+          })
+        );
       })
     );
   }

@@ -31,10 +31,10 @@ export class AccountListComponent implements OnInit {
   }
 
   canPost(account: Account): boolean {
-    return true;  // Stub
+    return true; // Stub
   }
 
- openCreateAccountDialog() {
+  openCreateAccountDialog() {
     const dialogRef = this.dialog.open(CreateAccountDialogComponent, {
       width: '500px',
     });
@@ -55,7 +55,7 @@ export class AccountListComponent implements OnInit {
   }
 
   openChargeModal(account: Account): void {
-    console.log('Charge for', account);  
+    console.log('Charge for', account);
   }
 
   manageChargeCodes(account: Account) {

@@ -1,6 +1,5 @@
 
 // src/app/financial/financial-account.component.ts
-// (Fixed: chargeCodes as string[] in loadAccount and onSubmit; no .name)
 
 import { Component, inject, OnInit } from '@angular/core';
 import { ReactiveFormsModule, FormBuilder, Validators, FormGroup, FormArray } from '@angular/forms';
@@ -33,7 +32,7 @@ import { format } from 'date-fns';
 })
 export class FinancialAccountComponent implements OnInit {
   form: FormGroup;
-  mode: 'new' | 'edit' = 'new';
+  mode: 'edit' = 'edit';
   private fb = inject(FormBuilder);
   private financialService = inject(FinancialService);
   private authService = inject(AuthService);
@@ -58,10 +57,10 @@ export class FinancialAccountComponent implements OnInit {
     this.form = this.fb.group({
       name: ['', Validators.required],
       accountNumber: ['', [Validators.required, Validators.pattern(/^\d{5}$/)]],
-      details: [''],
+      description: [''],
       startingBalance: [0, [Validators.required, Validators.min(0)]],
       type: ['Asset', Validators.required],
-      rate: [0],
+      rate: [25.0, Validators.required],
       chargeCodes: this.fb.array([]),
       adjustment: this.fb.group({
         amount: [0],
@@ -74,7 +73,6 @@ export class FinancialAccountComponent implements OnInit {
   ngOnInit() {
     const id = this.route.snapshot.paramMap.get('id');
     if (id) {
-      this.mode = 'edit';
       this.loadAccount(id);
     }
   }
@@ -85,7 +83,7 @@ export class FinancialAccountComponent implements OnInit {
       this.form.patchValue({
         name: account.name,
         accountNumber: account.accountNumber,
-        details: account.details || '',
+        description: account.details || '',
         startingBalance: account.startingBalance,
         type: account.type,
         rate: account.rate,
@@ -95,13 +93,22 @@ export class FinancialAccountComponent implements OnInit {
         this.chargeCodesFormArray.push(this.fb.group({ name: [cc, Validators.required] }));
       });
     } catch (error) {
-      this.snackBar.open('Failed to load account', 'OK');
+      this.snackBar.open('Failed to load account', 'OK', { duration: 5000 });
       this.router.navigate(['/accounts/list']);
     }
   }
 
   addChargeCode() {
     this.chargeCodesFormArray.push(this.fb.group({ name: ['', Validators.required] }));
+  }
+
+  addAutoChargeCode() {
+    const name = this.form.get('name')?.value as string;
+    const time = format(new Date(), 'HHmm');
+    const prefix = name.slice(0, 2).toUpperCase();
+    const suffix = time.slice(-2);
+    const autoCode = `${prefix}XXX${suffix}`; // Placeholder XXX; updated post-save
+    this.chargeCodesFormArray.push(this.fb.group({ name: [autoCode, Validators.required] }));
   }
 
   removeChargeCode(index: number) {
@@ -112,31 +119,41 @@ export class FinancialAccountComponent implements OnInit {
     if (this.form.invalid) return;
     try {
       const formValue = this.form.value;
-      const chargeCodes: string[] = formValue.chargeCodes.map((cc: { name: string }) => cc.name);
-      const accountData: Omit<Account, 'id'> | Partial<Account> = {
-        ...formValue,
+      const chargeCodes: string[] = formValue.chargeCodes.map((cc: { name: string }) => {
+        const prefix = cc.name.slice(0, 2).toUpperCase();
+        const idPart = this.route.snapshot.paramMap.get('id')!.slice(-3); // Last 3 digits of AWS ID
+        if (cc.name.includes('XXX')) {
+          // Auto-generated: Replace XXX with ID + time suffix
+          const time = format(new Date(), 'HHmm').slice(-2);
+          return `${prefix}${idPart}${time}`;
+        }
+        // Manual: Use name + ID
+        return `${prefix}${idPart}`;
+      });
+      const accountData: Partial<Account> = {
+        name: formValue.name,
+        accountNumber: formValue.accountNumber,
+        details: formValue.description,
+        startingBalance: formValue.startingBalance,
+        type: formValue.type,
+        rate: formValue.rate,
         chargeCodes,
         date: format(new Date(), 'yyyy-MM-dd'),
       };
-      let account: Account;
-      if (this.mode === 'new') {
-        account = await this.financialService.createAccount(accountData as Omit<Account, 'id'>);
-      } else {
-        account = await this.financialService.updateAccount(this.route.snapshot.paramMap.get('id')!, accountData);
-        const adj = formValue.adjustment;
-        if (adj.amount && adj.amount !== 0) {
-          await this.financialService.createTransaction({
-            accountId: account.id,
-            amount: Math.abs(adj.amount),
-            debit: adj.debit,
-            description: adj.description || 'Balance adjustment',
-          });
-        }
+      const account = await this.financialService.updateAccount(this.route.snapshot.paramMap.get('id')!, accountData);
+      const adj = formValue.adjustment;
+      if (adj.amount && adj.amount !== 0) {
+        await this.financialService.createTransaction({
+          accountId: account.id,
+          amount: Math.abs(adj.amount),
+          debit: adj.debit,
+          description: adj.description || 'Balance adjustment',
+        });
       }
-      this.snackBar.open(`${this.mode === 'new' ? 'Account created' : 'Account updated'} successfully! Charge code groups updated.`, 'OK');
+      this.snackBar.open('Account updated successfully! Charge code groups updated.', 'OK', { duration: 2000 });
       this.router.navigate(['/accounts/list']);
     } catch (error: any) {
-      this.snackBar.open(error.message || 'Failed to save account', 'OK');
+      this.snackBar.open(error.message || 'Failed to save account', 'OK', { duration: 5000 });
     }
   }
 }

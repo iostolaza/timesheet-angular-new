@@ -1,4 +1,5 @@
 
+// src/app/financial/create-account/create-account-dialog.component.ts
 
 import { Component, Inject } from '@angular/core';
 import { ReactiveFormsModule, FormBuilder, Validators, FormGroup, FormArray } from '@angular/forms';
@@ -40,7 +41,6 @@ export class CreateAccountDialogComponent {
   ) {
     this.form = this.fb.group({
       name: ['', Validators.required],
-      accountNumber: ['', [Validators.required, Validators.pattern(/^\d{5}$/)]],
       description: [''],
       startingBalance: [0, [Validators.required, Validators.min(0)]],
       type: ['Asset', Validators.required],
@@ -83,10 +83,12 @@ export class CreateAccountDialogComponent {
     if (this.form.invalid) return;
     try {
       const formValue = this.form.value;
+      // Generate random 5-digit account number
+      const accountNumber = Math.floor(10000 + Math.random() * 90000).toString();
       // Save account first to get AWS-generated ID
       const accountData: Omit<Account, 'id'> = {
         name: formValue.name,
-        accountNumber: formValue.accountNumber,
+        accountNumber,
         details: formValue.description,
         balance: formValue.startingBalance,
         startingBalance: formValue.startingBalance,
@@ -115,7 +117,7 @@ export class CreateAccountDialogComponent {
       this.snackBar.open('Account created successfully! Charge code groups updated.', 'OK', { duration: 2000 });
       this.dialogRef.close(account);
     } catch (error: any) {
-      this.snackBar.open(error.message || 'Failed to create account', 'OK');
+      this.snackBar.open(error.message || 'Failed to create account', 'OK', { duration: 5000 });
     }
   }
 }

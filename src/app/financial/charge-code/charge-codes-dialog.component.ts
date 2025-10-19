@@ -28,7 +28,7 @@ export class ChargeCodesDialogComponent {
 
   openUsersDialog(chargeCodeName: string) {
     this.dialog.open(ChargeCodeUsersDialogComponent, {
-      width: '400px',
+      width: '500px',
       data: { chargeCodeName },
     });
   }
