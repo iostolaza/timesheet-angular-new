@@ -43,7 +43,8 @@ export class TimesheetService {
     return { ... (ts as Timesheet), entries: entries as TimesheetEntry[] };
   }
 
-  async addEntry(entry: Omit<TimesheetEntry, 'id'>, timesheetId: string): Promise<TimesheetEntry> {
+  async addEntry(entry: Omit<TimesheetEntry, 'id' | 'timesheetId'>, timesheetId: string)
+: Promise<TimesheetEntry> {
     const sub = await firstValueFrom(this.authService.getUserSub());
     const fullEntry = { ...entry, owner: sub!, timesheetId };
     const { data: existing } = await (this.client.models as any)['TimesheetEntry'].list({
