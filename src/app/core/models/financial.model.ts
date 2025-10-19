@@ -15,6 +15,11 @@ export interface Account {
   chargeCodes: string[];
 }
 
+export interface ChargeCode {
+  name: string;
+  linkedAccount: string;
+}
+
 export interface Transaction {
   id: string;
   accountId: string;
@@ -33,4 +38,5 @@ export interface User {
   name: string;
   role: 'Employee' | 'Manager' | 'Admin';
   rate: number;
+  groups?: string[]; 
 }

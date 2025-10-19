@@ -1,6 +1,5 @@
 
-
-// src/app/core/services/auth.service.ts
+// src/core/services/auth.service.ts
 
 import { Injectable } from '@angular/core';
 import { Amplify } from 'aws-amplify';
@@ -12,6 +11,11 @@ import { Observable, from, BehaviorSubject, throwError, of, retry, delay, timeou
 import { map, switchMap, filter } from 'rxjs/operators';
 import outputs from '../../../../amplify_outputs.json';
 import { User } from '../models/financial.model';
+import { CognitoIdentityProviderClient, 
+         CreateGroupCommand, 
+         AdminAddUserToGroupCommand, 
+         ListUsersCommand,
+         ListUsersCommandOutput } from '@aws-sdk/client-cognito-identity-provider';
 
 interface HubPayload {
   event: string;
@@ -29,9 +33,16 @@ interface HubPayload {
 export class AuthService {
   private userSubject = new BehaviorSubject<User | null>(null);
   private client = generateClient<Schema>();
+  private cognitoClient: CognitoIdentityProviderClient;
+  private userPoolId: string;
 
   constructor() {
     Amplify.configure(outputs);
+    const config = Amplify.getConfig();
+    this.userPoolId = config.Auth?.Cognito?.userPoolId || '';
+    this.cognitoClient = new CognitoIdentityProviderClient({ 
+      region: 'us-east-1' // Hardcoded default; adjust if multi-region
+    });
     Hub.listen('auth', ({ payload }: { payload: HubPayload }) => {
       const { event, data } = payload;
       if (event === 'signedIn' && data?.tokens?.idToken?.payload) {
@@ -42,9 +53,10 @@ export class AuthService {
           const derivedUser: User = {
             id: sub,
             email: ((payloadData['email'] || payloadData['cognito:username'] || payloadData['preferred_username'] || data.username || '') as string),
-            name: 'Default User',  // Default; sync from DB/profile later
+            name: 'Default User',
             role: this.deriveRoleFromGroups(groups),
-            rate: 25.0,  // Default; customize per role/DB
+            rate: 25.0,
+            groups,
           };
           this.userSubject.next(derivedUser);
         }
@@ -130,6 +142,7 @@ export class AuthService {
           name: 'Default User',
           role: this.deriveRoleFromGroups(groups),
           rate: 25.0,
+          groups,
         };
         console.log('getCurrentUser success:', user);
         return user;
@@ -141,7 +154,7 @@ export class AuthService {
     );
   }
 
-  async createUserIfNotExists(user: User): Promise<void> {  // Updated: Takes derived User; idempotent by id
+  async createUserIfNotExists(user: User): Promise<void> {
     try {
       await this.getUserById(user.id);
       console.log('User already exists:', user.id);
@@ -160,7 +173,7 @@ export class AuthService {
   }
 
   getUserSub(): Observable<string | null> {
-    return this.userSubject.asObservable().pipe(map((user) => user?.id || null));  // Updated: id = sub
+    return this.userSubject.asObservable().pipe(map((user) => user?.id || null));
   }
 
   getUserEmail(): Observable<string | null> {
@@ -168,12 +181,55 @@ export class AuthService {
   }
 
   getUserGroups(): Observable<string[]> {
-    return this.userSubject.asObservable().pipe(map((user) => {  // Updated: Derive groups from role (reverse mapping)
-      switch (user?.role) {
-        case 'Admin': return ['Admin'];
-        case 'Manager': return ['Manager'];
-        default: return ['Employee'];
+    return this.userSubject.asObservable().pipe(map((user) => user?.groups || []));
+  }
+
+  async listUsers(): Promise<User[]> {
+    if (!this.userPoolId) throw new Error('User pool ID not configured');
+    const command = new ListUsersCommand({ 
+      UserPoolId: this.userPoolId,
+      Limit: 60
+    });
+    const response = await this.cognitoClient.send(command) as ListUsersCommandOutput;
+    return response.Users?.map((user: any) => {
+      const attributes = Object.fromEntries(
+        user.Attributes.map((attr: any) => [attr.Name, attr.Value])
+      ) as Record<string, string>;
+      return {
+        id: attributes['sub'] || '',
+        email: attributes['email'] || '',
+        name: attributes['name'] || user.Username || '',
+        role: (attributes['custom:role'] || 'Employee') as 'Employee' | 'Manager' | 'Admin',
+        rate: parseFloat(attributes['custom:rate'] || '0'),
+        groups: [], // Not in listUsers; fetch if needed
+      };
+    }) || [];
+  }
+
+  async addUserToGroup(email: string, groupName: string): Promise<void> {
+    if (!this.userPoolId) throw new Error('User pool ID not configured');
+    const command = new AdminAddUserToGroupCommand({ 
+      UserPoolId: this.userPoolId, 
+      Username: email, // Cognito uses email as username
+      GroupName: groupName 
+    });
+    await this.cognitoClient.send(command);
+  }
+
+  async createGroup(groupName: string): Promise<void> {
+    if (!this.userPoolId) throw new Error('User pool ID not configured');
+    const command = new CreateGroupCommand({ 
+      GroupName: groupName, 
+      UserPoolId: this.userPoolId 
+    });
+    try {
+      await this.cognitoClient.send(command);
+    } catch (error: any) {
+      if (error.name === 'InvalidParameterException' && error.message.includes('Group already exists')) {
+        console.log(`Group ${groupName} already exists`);
+      } else {
+        throw error;
       }
-    }));
+    }
   }
 }

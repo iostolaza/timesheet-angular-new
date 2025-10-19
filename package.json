@@ -30,6 +30,7 @@
     "@angular/platform-browser": "^20.1.0",
     "@angular/router": "^20.1.0",
     "@aws-amplify/ui-angular": "^5.1.5",
+    "@aws-sdk/client-cognito-identity-provider": "^3.913.0",
     "@fullcalendar/angular": "^6.1.19",
     "@fullcalendar/core": "^6.1.19",
     "@fullcalendar/daygrid": "^6.1.19",

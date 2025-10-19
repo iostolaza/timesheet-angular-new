@@ -1,9 +1,8 @@
 
-<!-- src/app/financial/financial-account.component.html -->
 
-<div class="container mx-auto p-4 max-w-2xl">
-  <h1 class="text-3xl font-bold mb-6">{{ mode === 'edit' ? 'Edit' : 'Create' }} Account</h1>
-  <form [formGroup]="form" (ngSubmit)="onSubmit()" class="space-y-6">
+<h2 mat-dialog-title>Create Account</h2>
+<mat-dialog-content class="max-h-96 overflow-y-auto p-4">
+  <form [formGroup]="form" class="space-y-4">
     <mat-form-field appearance="outline" class="w-full">
       <mat-label>Name</mat-label>
       <input matInput formControlName="name" required>
@@ -18,8 +17,8 @@
     </mat-form-field>
 
     <mat-form-field appearance="outline" class="w-full">
-      <mat-label>Details</mat-label>
-      <textarea matInput formControlName="details" rows="3"></textarea>
+      <mat-label>Description</mat-label>
+      <textarea matInput formControlName="description" rows="3"></textarea>
     </mat-form-field>
 
     <mat-form-field appearance="outline" class="w-full">
@@ -41,8 +40,9 @@
     </mat-form-field>
 
     <mat-form-field appearance="outline" class="w-full">
-      <mat-label>Rate</mat-label>
-      <input matInput type="number" formControlName="rate">
+      <mat-label>Hourly Rate</mat-label>
+      <input matInput type="number" formControlName="rate" required>
+      <mat-error *ngIf="form.get('rate')?.hasError('required')">Rate is required</mat-error>
     </mat-form-field>
 
     <!-- Charge Codes Section -->
@@ -56,40 +56,18 @@
           <mat-error *ngIf="getChargeCodeControl(i)?.get('name')?.hasError('required')">Name is required</mat-error>
         </mat-form-field>
         <div class="flex justify-between items-center">
-          <span class="text-sm text-gray-600">Code: {{ form.get('accountNumber')?.value }}-{{ getChargeCodeDisplay(i) }}</span>
+          <span class="text-sm text-gray-600">Code: {{ getChargeCodeDisplay(i) }}</span>
           <button type="button" mat-icon-button color="warn" (click)="removeChargeCode(i)">
             <mat-icon>delete</mat-icon>
           </button>
         </div>
       </div>
       <button type="button" mat-raised-button color="accent" (click)="addChargeCode()">Add Charge Code</button>
-    </div>
-
-    <!-- Adjust Funds (Edit only) -->
-    <div *ngIf="mode === 'edit'" formGroupName="adjustment">
-      <h3 class="text-lg font-semibold mb-2">Adjust Balance</h3>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <mat-form-field appearance="outline">
-          <mat-label>Amount</mat-label>
-          <input matInput type="number" formControlName="amount">
-        </mat-form-field>
-        <mat-form-field appearance="outline">
-          <mat-label>Debit/Credit</mat-label>
-          <mat-select formControlName="debit">
-            <mat-option [value]="true">Debit</mat-option>
-            <mat-option [value]="false">Credit</mat-option>
-          </mat-select>
-        </mat-form-field>
-        <mat-form-field appearance="outline">
-          <mat-label>Description</mat-label>
-          <input matInput formControlName="description">
-        </mat-form-field>
-      </div>
-    </div>
-
-    <div class="flex justify-end space-x-4">
-      <button mat-button type="button" routerLink="/accounts/list">Cancel</button>
-      <button mat-raised-button color="primary" type="submit" [disabled]="form.invalid">Save Account</button>
+      <button type="button" mat-raised-button color="accent" class="ml-2" (click)="addAutoChargeCode()">Add Auto Charge Code</button>
     </div>
   </form>
-</div>
+</mat-dialog-content>
+<mat-dialog-actions class="p-4 bg-gray-50 border-t">
+  <button mat-button (click)="dialogRef.close()">Cancel</button>
+  <button mat-raised-button color="primary" (click)="save()" [disabled]="form.invalid">Save</button>
+</mat-dialog-actions>
