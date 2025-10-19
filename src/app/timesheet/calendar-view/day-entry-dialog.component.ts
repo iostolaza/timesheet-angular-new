@@ -19,18 +19,24 @@ export class DayEntryDialogComponent {
 
   constructor(
     public dialogRef: MatDialogRef<DayEntryDialogComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: { date: string; timesheetId: string },
+    @Inject(MAT_DIALOG_DATA) public data: { date: string; timesheetId: string; entry?: any },  // Optional existing entry
     private fb: FormBuilder
   ) {
+    const initialEntries = this.data.entry ? [this.data.entry] : [  // Pre-fill if edit
+      {
+        startTime: ['', Validators.required],
+        endTime: ['', Validators.required],
+        description: ['', Validators.required],
+        chargeCode: ['', Validators.required],
+      }
+    ];
     this.form = this.fb.group({
-      entries: this.fb.array([
-        this.fb.group({
-          startTime: ['', Validators.required],
-          endTime: ['', Validators.required],
-          description: ['', Validators.required],
-          chargeCode: ['', Validators.required],
-        }),
-      ]),
+      entries: this.fb.array(initialEntries.map(e => this.fb.group({
+        startTime: [e.startTime || '', Validators.required],
+        endTime: [e.endTime || '', Validators.required],
+        description: [e.description || '', Validators.required],
+        chargeCode: [e.chargeCode || '', Validators.required],
+      }))),
     });
   }
 
