@@ -1,6 +1,52 @@
 
 <!-- src/app/timesheet/calendar-view/calendar.component.html -->
 
-<div class="p-4">
-  <full-calendar [options]="calendarOptions"></full-calendar>
+<div class="container mx-auto p-4 max-w-6xl">
+  <!-- Header -->
+  <div class="flex justify-between items-center mb-6">
+    <div>
+      <h1 class="text-3xl font-bold text-gray-900">Weekly Timesheet</h1>
+      <p class="text-gray-600 mt-1">{{ weekRange }}</p>
+    </div>
+    <div class="text-right">
+      <p class="text-lg font-semibold">{{ userName }}</p>
+      <button mat-raised-button color="primary" class="mt-2" (click)="openChargeCodeDialog()">Add Charge Code</button>
+    </div>
+  </div>
+
+  <!-- Calendar in Shadow Div -->
+  <div class="bg-white rounded-lg shadow-lg border border-gray-200 p-4 mb-6">
+    <full-calendar [options]="calendarOptions"></full-calendar>
+  </div>
+
+  <!-- Summary Footer -->
+  <div class="bg-white rounded-lg shadow-lg border border-gray-200 p-6">
+    <h3 class="text-xl font-bold mb-4">Weekly Summary</h3>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+      <div class="text-center">
+        <p class="text-sm text-gray-600">Total Hours</p>
+        <p class="text-2xl font-bold">{{ weeklyTotal }}h</p>
+      </div>
+      <div class="text-center">
+        <p class="text-sm text-gray-600">Daily Avg</p>
+        <p class="text-2xl font-bold">{{ dailyAvg.toFixed(1) }}h</p>
+      </div>
+      <div class="text-center">
+        <p class="text-sm text-gray-600">Total $</p>
+        <p class="text-2xl font-bold">${{ totalCost.toFixed(2) }}</p>
+      </div>
+      <div class="text-center">
+        <p class="text-sm text-gray-600">Status</p>
+        <p [class]="isValid() ? 'text-green-600' : 'text-red-600' " class="text-2xl font-bold">{{ isValid() ? 'Valid' : 'Invalid' }}</p>
+      </div>
+    </div>
+    <div *ngIf="!isValid()" class="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700">
+      {{ validationMessage }}
+    </div>
+    <div class="text-center">
+      <button mat-raised-button color="primary" (click)="submitTimesheet()" [disabled]="!isValid()" class="px-8 py-2">
+        Submit Timesheet
+      </button>
+    </div>
+  </div>
 </div>

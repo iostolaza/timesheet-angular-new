@@ -3,8 +3,8 @@
 
 import { Component, Inject } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
-import { FormBuilder, FormGroup, Validators, ReactiveFormsModule, FormArray } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { ReactiveFormsModule, FormBuilder, FormGroup, Validators, FormArray } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 
 @Component({
@@ -19,10 +19,10 @@ export class DayEntryDialogComponent {
 
   constructor(
     public dialogRef: MatDialogRef<DayEntryDialogComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: { date: string; timesheetId: string; entry?: any },  // Optional existing entry
+    @Inject(MAT_DIALOG_DATA) public data: { date: string; timesheetId: string; entry?: any },
     private fb: FormBuilder
   ) {
-    const initialEntries = this.data.entry ? [this.data.entry] : [  // Pre-fill if edit
+    const initialEntries = this.data.entry ? [this.data.entry] : [
       {
         startTime: ['', Validators.required],
         endTime: ['', Validators.required],
