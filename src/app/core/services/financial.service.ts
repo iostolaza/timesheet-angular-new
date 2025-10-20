@@ -57,13 +57,12 @@ export class FinancialService {
         details: account.details ?? null,
         balance: account.startingBalance ?? 0,
         startingBalance: account.startingBalance ?? 0,
-        endingBalance: account.endingBalance ?? null,
         date: account.date,
         type: account.type,
         rate: account.rate,
         chargeCodes: account.chargeCodes ?? [],
       };
-      const { data, errors } = await (this.client.models as any)['Account'].create({ data: input });
+      const { data, errors } = await (this.client.models as any)['Account'].create(input);
       if (errors?.length) {
         throw new Error(`Failed to create account: ${errors.map((e: any) => e.message).join(', ')}`);
       }
