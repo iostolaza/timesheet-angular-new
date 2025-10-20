@@ -58,6 +58,12 @@ export class ChargeCodeDialogComponent {
     }
   }
 
+  private generateChargeCode(name: string, accountNumber: string): string {
+    const prefix = name.slice(0, 2).toUpperCase();
+    const suffix = accountNumber.slice(-3);
+    return `${prefix}${suffix}`;
+  }
+
   async loadAvailableCodes(): Promise<void> {
     try {
       const userGroups: string[] = await firstValueFrom(this.authService.getUserGroups());
@@ -67,7 +73,7 @@ export class ChargeCodeDialogComponent {
           account.chargeCodes.map((cc: string) => ({
             name: cc,
             linkedAccount: account.accountNumber,
-            id: `${account.id}-${cc}`,
+            id: `${account.accountNumber}-${cc}`,
             active: false,
           }))
         )
@@ -98,8 +104,8 @@ export class ChargeCodeDialogComponent {
       }
       const formValue = this.form.value;
       const chargeCode: ChargeCode = {
-        name: `${formValue.name.toUpperCase().slice(0, 2)}${this.data.account?.id.slice(-3) || 'XXX'}`,
-        linkedAccount: this.data.account?.accountNumber || 'ACC001',
+        name: this.generateChargeCode(formValue.name, this.data.account?.accountNumber || 'UNKNOWN'),
+        linkedAccount: this.data.account?.accountNumber || 'UNKNOWN',
       };
       this.dialogRef.close([chargeCode]);
     } else {

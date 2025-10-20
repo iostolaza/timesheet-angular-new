@@ -34,9 +34,9 @@ export interface Transaction {
 
 export interface User {
   id: string;
-  email: string;  
+  email: string;
   name: string;
   role: 'Employee' | 'Manager' | 'Admin';
   rate: number;
-  groups?: string[]; 
+  groups?: string[];
 }

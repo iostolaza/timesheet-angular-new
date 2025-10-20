@@ -16,13 +16,16 @@ const schema = a.schema({
       name: a.string().required(),
       role: a.enum(['Employee', 'Manager', 'Admin']),
       rate: a.float().required(),
+      groups: a.string().array(),
     })
     .authorization((allow) => [
       allow.ownerDefinedIn('id').to(['create', 'read', 'update', 'delete']),
       allow.authenticated().to(['create', 'read', 'update']),
+      allow.groups(['Admin']).to(['create', 'read', 'update', 'delete']),
     ]),
   Account: a
     .model({
+      id: a.id().required(),
       accountNumber: a.string().required(),
       name: a.string().required(),
       details: a.string(),
@@ -41,6 +44,7 @@ const schema = a.schema({
     ]),
   Transaction: a
     .model({
+      id: a.id().required(),
       accountId: a.id().required(),
       fromAccountId: a.id(),
       fromName: a.string(),
@@ -57,12 +61,12 @@ const schema = a.schema({
     ]),
   Timesheet: a
     .model({
-      id: a.id().required(),  // Explicit for models
+      id: a.id().required(),
       status: a.enum(['draft', 'submitted', 'approved', 'rejected']),
       totalHours: a.float().required(),
       totalCost: a.float(),
       owner: a.string().required(),
-      rejectionReason: a.string(),  // Fixed typo
+      rejectionReason: a.string(),
       entries: a.hasMany('TimesheetEntry', 'timesheetId'),
     })
     .authorization((allow) => [
@@ -72,7 +76,7 @@ const schema = a.schema({
     ]),
   TimesheetEntry: a
     .model({
-      id: a.id().required(),  // Explicit
+      id: a.id().required(),
       timesheetId: a.id().required(),
       date: a.string().required(),
       startTime: a.string().required(),

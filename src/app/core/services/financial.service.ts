@@ -16,6 +16,12 @@ export class FinancialService {
   private client = generateClient<Schema>({ authMode: 'userPool' });
   private authService = inject(AuthService);
 
+  private generateChargeCode(name: string, accountNumber: string): string {
+    const prefix = name.slice(0, 2).toUpperCase();
+    const suffix = accountNumber.slice(-3);
+    return `${prefix}${suffix}`;
+  }
+
   async listAccounts(): Promise<Account[]> {
     try {
       const { data, errors } = await (this.client.models as any)['Account'].list({});
@@ -45,14 +51,13 @@ export class FinancialService {
     }
   }
 
-  async createAccount(account: Omit<Account, 'id'>): Promise<Account> {
+  async createAccount(account: Omit<Account, 'id' | 'accountNumber'>): Promise<Account> {
     try {
       const groups = await firstValueFrom(this.authService.getUserGroups());
       if (!groups.includes('Admin')) {
         throw new Error('Admin access required');
       }
       const input = {
-        accountNumber: account.accountNumber,
         name: account.name,
         details: account.details ?? null,
         balance: account.startingBalance ?? 0,
@@ -60,23 +65,36 @@ export class FinancialService {
         date: account.date,
         type: account.type,
         rate: account.rate,
-        chargeCodes: account.chargeCodes ?? [],
+        chargeCodes: [],
       };
       const { data, errors } = await (this.client.models as any)['Account'].create(input);
       if (errors?.length) {
         throw new Error(`Failed to create account: ${errors.map((e: any) => e.message).join(', ')}`);
       }
-      if (!data) {
-        console.error('No data returned from createAccount:', { input });
-        throw new Error('Account creation failed: No data returned');
+      if (!data || !data.id) {
+        console.error('No data or ID returned from createAccount:', { input });
+        throw new Error('Account creation failed: No ID returned');
       }
-      console.log('Raw createAccount response:', data);
-      const createdAccount = data as Account;
-      if (!createdAccount.id) {
-        console.error('No id in response:', createdAccount);
-        throw new Error('Account creation failed: No ID returned in response');
+      const accountNumber = data.id.replace(/-/g, '').slice(-16);
+      const defaultChargeCode = this.generateChargeCode(account.name, accountNumber);
+      const updatedAccount = {
+        id: data.id,
+        accountNumber,
+        chargeCodes: [defaultChargeCode],
+      };
+      const { data: updatedData, errors: updateErrors } = await (this.client.models as any)['Account'].update(updatedAccount);
+      if (updateErrors?.length) {
+        throw new Error(`Failed to update account with accountNumber: ${updateErrors.map((e: any) => e.message).join(', ')}`);
       }
-      for (const cc of createdAccount.chargeCodes ?? []) {
+      if (!updatedData) {
+        throw new Error(`Account ${data.id} not found after update`);
+      }
+      const createdAccount = {
+        ...data,
+        ...updatedData,
+        chargeCodes: [defaultChargeCode],
+      } as Account;
+      for (const cc of createdAccount.chargeCodes) {
         await this.authService.createGroup(`chargecode-${cc}`);
       }
       return createdAccount;

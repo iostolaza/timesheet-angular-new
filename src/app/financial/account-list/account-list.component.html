@@ -27,9 +27,7 @@
       <ng-container matColumnDef="actions">
         <th mat-header-cell *matHeaderCellDef class="text-gray-900 font-semibold">Actions</th>
         <td mat-cell *matCellDef="let acct" class="flex gap-2">
-          <button mat-icon-button (click)="editAccount(acct.id)" color="primary" class="text-blue-600 hover:text-blue-700">
-            <mat-icon>edit</mat-icon>
-          </button>
+          <button mat-button (click)="editAccount(acct.id)" class="btn btn-primary">edit</button>
           <button mat-button (click)="openLedger(acct.id)" class="btn btn-primary">View Ledger</button>
           <button mat-button *ngIf="canPost(acct)" (click)="openChargeModal(acct)" class="btn btn-outline">Request Charge</button>
           <!-- <button mat-button (click)="manageChargeCodes(acct)" class="btn bg-green-600 hover:bg-green-700 text-white">Manage Charge Codes</button> -->

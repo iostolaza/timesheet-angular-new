@@ -8,8 +8,10 @@ import { MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { CommonModule } from '@angular/common';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { FinancialService } from '../../core/services/financial.service';
+import { AuthService } from '../../core/services/auth.service';
 import { Account } from '../../core/models/financial.model';
 import { format } from 'date-fns';
+import { firstValueFrom } from 'rxjs';
 
 @Component({
   selector: 'app-create-account-dialog',
@@ -24,16 +26,18 @@ import { format } from 'date-fns';
 })
 export class CreateAccountDialogComponent {
   accountForm: FormGroup;
+  errorMessage: string | null = null;
 
   constructor(
     public dialogRef: MatDialogRef<CreateAccountDialogComponent>,
     private fb: FormBuilder,
     private financialService: FinancialService,
+    private authService: AuthService,
     private snackBar: MatSnackBar
   ) {
     this.accountForm = this.fb.group({
       name: ['', [Validators.required, Validators.minLength(3)]],
-      description: [''],
+      details: [''],
       startingBalance: [0, [Validators.min(0)]],
       type: ['', Validators.required],
     });
@@ -42,15 +46,18 @@ export class CreateAccountDialogComponent {
   async save() {
     if (this.accountForm.invalid) {
       this.accountForm.markAllAsTouched();
+      this.errorMessage = 'Please fill out all required fields correctly';
       return;
     }
     try {
+      const groups = await firstValueFrom(this.authService.getUserGroups());
+      if (!groups.includes('Admin')) {
+        throw new Error('Admin access required');
+      }
       const formValue = this.accountForm.value;
-      const accountNumber = Math.floor(10000 + Math.random() * 90000).toString();
-      const accountData: Omit<Account, 'id'> = {
+      const accountData: Omit<Account, 'id' | 'accountNumber'> = {
         name: formValue.name,
-        accountNumber,
-        details: formValue.description,
+        details: formValue.details || undefined,
         balance: formValue.startingBalance ?? 0,
         startingBalance: formValue.startingBalance ?? 0,
         date: format(new Date(), 'yyyy-MM-dd'),
@@ -59,19 +66,12 @@ export class CreateAccountDialogComponent {
         rate: 25.0,
       };
       const account = await this.financialService.createAccount(accountData);
-
-      // Log the response for debugging
-      console.log('Created account:', account);
-
-      if (!account || !account.id) {
-        throw new Error('Account creation failed: No ID returned');
-      }
-
       this.snackBar.open('Account created successfully!', 'OK', { duration: 2000 });
       this.dialogRef.close(account);
     } catch (error: any) {
       console.error('Account creation error:', error);
-      this.snackBar.open(`Failed to create account: ${error.message || 'Unknown error'}`, 'OK', { duration: 5000 });
+      this.errorMessage = `Failed to create account: ${error.message || 'Unknown error'}`;
+      this.snackBar.open(this.errorMessage, 'OK', { duration: 5000 });
     }
   }
 

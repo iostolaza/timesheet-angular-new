@@ -1,0 +1,140 @@
+
+<!-- src/app/financial/edit-account/edit-account-dialog.component.html -->
+
+<div class="bg-white rounded-2xl shadow-xl p-6">
+  <h2 class="text-2xl font-bold text-gray-800 mb-4">{{ data.account.name }}</h2>
+   <h3 class="text-2xl font-bold text-gray-800 mb-4">Edit Account:</h3>
+  <div *ngIf="errorMessage" class="text-red-500 text-sm mb-4" role="alert">{{ errorMessage }}</div>
+
+  <form [formGroup]="form" class="space-y-4">
+    <!-- ID -->
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">ID</label>
+      <input
+        type="text"
+        formControlName="id"
+        class="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-100"
+        readonly
+        aria-readonly="true"
+      />
+    </div>
+
+    <!-- Account Number -->
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
+      <input
+        type="text"
+        formControlName="accountNumber"
+        class="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-100"
+        readonly
+        aria-readonly="true"
+      />
+    </div>
+
+    <!-- Name -->
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+      <input
+        type="text"
+        formControlName="name"
+        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        placeholder="Account name"
+        [attr.aria-required]="form.get('name')?.hasError('required')"
+      />
+      <div *ngIf="form.get('name')?.hasError('required') && form.get('name')?.touched" class="text-red-500 text-sm mt-1">Name is required</div>
+      <div *ngIf="form.get('name')?.hasError('minlength') && form.get('name')?.touched" class="text-red-500 text-sm mt-1">Name must be at least 3 characters</div>
+    </div>
+
+    <!-- Description -->
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+      <textarea
+        formControlName="details"
+        rows="2"
+        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        placeholder="Optional description"
+      ></textarea>
+    </div>
+
+    <!-- Current Balance -->
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Current Balance</label>
+      <input
+        type="number"
+        formControlName="balance"
+        class="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-100"
+        readonly
+        aria-readonly="true"
+      />
+    </div>
+
+    <!-- Add Funds -->
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Add Funds</label>
+      <input
+        type="number"
+        formControlName="addFunds"
+        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        placeholder="0.00"
+      />
+      <div *ngIf="form.get('addFunds')?.hasError('min') && form.get('addFunds')?.touched" class="text-red-500 text-sm mt-1">Amount cannot be negative</div>
+    </div>
+
+    <!-- Account Type -->
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Account Type</label>
+      <select formControlName="type" class="w-full border border-gray-300 rounded-md px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none" [attr.aria-required]="form.get('type')?.hasError('required')">
+        <option value="">Select type</option>
+        <option *ngFor="let type of accountTypes" [value]="type">{{ type }}</option>
+      </select>
+      <div *ngIf="form.get('type')?.hasError('required') && form.get('type')?.touched" class="text-red-500 text-sm mt-1">Account type is required</div>
+    </div>
+
+    <!-- Rate -->
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Rate</label>
+      <input
+        type="number"
+        formControlName="rate"
+        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        placeholder="Enter rate"
+        [attr.aria-required]="form.get('rate')?.hasError('required')"
+      />
+      <div *ngIf="form.get('rate')?.hasError('required') && form.get('rate')?.touched" class="text-red-500 text-sm mt-1">Rate is required</div>
+      <div *ngIf="form.get('rate')?.hasError('min') && form.get('rate')?.touched" class="text-red-500 text-sm mt-1">Rate cannot be negative</div>
+    </div>
+  </form>
+
+  <!-- Charge Codes -->
+  <div class="mt-6">
+    <h3 class="text-lg font-semibold text-gray-800 mb-2">Charge Codes</h3>
+    <button mat-raised-button class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md mb-4" (click)="openCreateChargeCodeDialog()">Add Charge Code</button>
+    <div class="divide-y divide-gray-200">
+      <div *ngFor="let code of chargeCodes" class="py-2 flex items-center">
+        <span class="flex-1 text-gray-700">{{ code.name }} ({{ code.linkedAccount }})</span>
+        <button mat-icon-button class="text-red-500 hover:text-red-700" (click)="removeChargeCode(code)" aria-label="Remove charge code">
+          <mat-icon>remove</mat-icon>
+        </button>
+        <button mat-icon-button class="text-blue-500 hover:text-blue-700" (click)="openChargeCodeUsersDialog(code.name)" aria-label="Manage users for charge code">
+          <mat-icon>group</mat-icon>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Buttons -->
+  <div class="mt-6 flex justify-end gap-3">
+    <button mat-button class="border border-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-100" (click)="dialogRef.close()" aria-label="Cancel">
+      Cancel
+    </button>
+    <button
+      mat-raised-button
+      class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
+      (click)="save()"
+      [disabled]="form.invalid"
+      aria-label="Save account"
+    >
+      Save
+    </button>
+  </div>
+</div>

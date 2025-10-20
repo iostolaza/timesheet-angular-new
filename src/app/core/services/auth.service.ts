@@ -11,11 +11,6 @@ import { Observable, from, BehaviorSubject, throwError, of, retry, delay, catchE
 import { map, switchMap, filter } from 'rxjs/operators';
 import outputs from '../../../../amplify_outputs.json';
 import { User } from '../models/financial.model';
-import { CognitoIdentityProviderClient, 
-         CreateGroupCommand, 
-         AdminAddUserToGroupCommand, 
-         ListUsersCommand,
-         ListUsersCommandOutput } from '@aws-sdk/client-cognito-identity-provider';
 
 interface HubPayload {
   event: string;
@@ -33,7 +28,6 @@ interface HubPayload {
 export class AuthService {
   private userSubject = new BehaviorSubject<User | null>(null);
   private client = generateClient<Schema>();
-  private cognitoClient: CognitoIdentityProviderClient;
   private userPoolId: string;
   private isInitialized = false;
 
@@ -41,11 +35,6 @@ export class AuthService {
     Amplify.configure(outputs);
     const config = Amplify.getConfig();
     this.userPoolId = config.Auth?.Cognito?.userPoolId || '';
-    this.cognitoClient = new CognitoIdentityProviderClient({ 
-      region: 'us-east-1' // Hardcoded default; adjust if multi-region
-    });
-
-    // Initialize user on construction to avoid multiple calls
     this.initializeUser();
 
     Hub.listen('auth', ({ payload }: { payload: HubPayload }) => {
@@ -64,10 +53,12 @@ export class AuthService {
             groups,
           };
           this.userSubject.next(derivedUser);
+          // Sync Cognito groups to User model
+          this.updateUserGroups(sub, groups);
         }
       } else if (event === 'signedOut') {
         this.userSubject.next(null);
-        this.isInitialized = false; // Reset for next sign-in
+        this.isInitialized = false;
       }
     });
   }
@@ -90,10 +81,28 @@ export class AuthService {
     return 'Employee';
   }
 
+  private async updateUserGroups(userId: string, groups: string[]): Promise<void> {
+    try {
+      const existingUser = await this.getUserById(userId);
+      if (!existingUser.groups || !existingUser.groups.every(g => groups.includes(g))) {
+        const { data, errors } = await (this.client.models as any)['User'].update({
+          id: userId,
+          groups,
+        });
+        if (errors?.length) {
+          throw new Error(`Failed to update user groups: ${errors.map((e: any) => e.message).join(', ')}`);
+        }
+        console.log('Updated user groups:', data);
+      }
+    } catch (error) {
+      console.error('Error updating user groups:', error);
+    }
+  }
+
   signIn(email: string, password: string): Observable<any> {
     return from(signIn({ username: email, password })).pipe(
       timeout({ each: 10000, with: () => throwError(() => new Error('Sign-in timeout - check network/Cognito')) }),
-      catchError((error) => {
+      catchError((error: any) => {
         console.error('AuthService signIn pipe error:', error);
         return throwError(() => new Error(`Sign-in failed: ${error.message || error}`));
       })
@@ -103,7 +112,7 @@ export class AuthService {
   confirmSignIn(newPassword: string): Observable<User> {
     return from(confirmSignIn({ challengeResponse: newPassword })).pipe(
       switchMap(() => this.getCurrentUser().pipe(filter((user): user is User => user !== null))),
-      catchError((error) => {
+      catchError((error: any) => {
         console.error('AuthService confirmSignIn error:', error);
         return throwError(() => new Error(`Password confirmation failed: ${error.message || error}`));
       })
@@ -118,7 +127,7 @@ export class AuthService {
         userAttributes: { email }
       }
     })).pipe(
-      catchError((error) => {
+      catchError((error: any) => {
         console.error('AuthService signUp error:', error);
         return throwError(() => new Error(`Sign-up failed: ${error.message || error}`));
       })
@@ -127,7 +136,7 @@ export class AuthService {
 
   confirmSignUp(email: string, code: string): Observable<any> {
     return from(confirmSignUp({ username: email, confirmationCode: code })).pipe(
-      catchError((error) => {
+      catchError((error: any) => {
         console.error('AuthService confirmSignUp error:', error);
         return throwError(() => new Error(`Confirmation failed: ${error.message || error}`));
       })
@@ -141,7 +150,7 @@ export class AuthService {
         this.isInitialized = false;
         return undefined;
       }),
-      catchError((error) => throwError(() => new Error(`Sign-out failed: ${error.message}`)))
+      catchError((error: any) => throwError(() => new Error(`Sign-out failed: ${error.message}`)))
     );
   }
 
@@ -168,7 +177,7 @@ export class AuthService {
             console.log('getCurrentUser success:', user);
             return user;
           }),
-          catchError((error) => {
+          catchError((error: any) => {
             console.error('getCurrentUser error:', error);
             return of(null);
           })
@@ -208,51 +217,54 @@ export class AuthService {
   }
 
   async listUsers(): Promise<User[]> {
-    if (!this.userPoolId) throw new Error('User pool ID not configured');
-    const command = new ListUsersCommand({ 
-      UserPoolId: this.userPoolId,
-      Limit: 60
-    });
-    const response = await this.cognitoClient.send(command) as ListUsersCommandOutput;
-    return response.Users?.map((user: any) => {
-      const attributes = Object.fromEntries(
-        user.Attributes.map((attr: any) => [attr.Name, attr.Value])
-      ) as Record<string, string>;
-      return {
-        id: attributes['sub'] || '',
-        email: attributes['email'] || '',
-        name: attributes['name'] || user.Username || '',
-        role: (attributes['custom:role'] || 'Employee') as 'Employee' | 'Manager' | 'Admin',
-        rate: parseFloat(attributes['custom:rate'] || '0'),
-        groups: [], // Not in listUsers; fetch if needed
-      };
-    }) || [];
+    try {
+      const model = (this.client.models as any)['User'];
+      const { data, errors } = await model.list({});
+      if (errors?.length) {
+        throw new Error(`Failed to list users: ${errors.map((e: any) => e.message).join(', ')}`);
+      }
+      return (data ?? []) as User[];
+    } catch (error) {
+      console.error('Error listing users:', error);
+      throw error;
+    }
   }
 
   async addUserToGroup(email: string, groupName: string): Promise<void> {
-    if (!this.userPoolId) throw new Error('User pool ID not configured');
-    const command = new AdminAddUserToGroupCommand({ 
-      UserPoolId: this.userPoolId, 
-      Username: email, // Cognito uses email as username
-      GroupName: groupName 
-    });
-    await this.cognitoClient.send(command);
+    try {
+      const users = await this.listUsers();
+      const user = users.find(u => u.email === email);
+      if (!user) {
+        throw new Error(`User with email ${email} not found`);
+      }
+      const currentGroups = user.groups || [];
+      if (!currentGroups.includes(groupName)) {
+        const updatedGroups = [...currentGroups, groupName];
+        const { data, errors } = await (this.client.models as any)['User'].update({
+          id: user.id,
+          groups: updatedGroups,
+        });
+        if (errors?.length) {
+          throw new Error(`Failed to add user to group: ${errors.map((e: any) => e.message).join(', ')}`);
+        }
+        console.log(`Added user ${email} to group ${groupName}`);
+      }
+    } catch (error: any) {
+      console.error('Error adding user to group:', error);
+      throw new Error(`Failed to add user to group: ${error.message || error}`);
+    }
   }
 
   async createGroup(groupName: string): Promise<void> {
-    if (!this.userPoolId) throw new Error('User pool ID not configured');
-    const command = new CreateGroupCommand({ 
-      GroupName: groupName, 
-      UserPoolId: this.userPoolId 
-    });
     try {
-      await this.cognitoClient.send(command);
-    } catch (error: any) {
-      if (error.name === 'InvalidParameterException' && error.message.includes('Group already exists')) {
-        console.log(`Group ${groupName} already exists`);
-      } else {
-        throw error;
+      const users = await this.listUsers();
+      const groupExists = users.some(user => user.groups?.includes(groupName));
+      if (!groupExists) {
+        console.log(`Group ${groupName} created (no-op in User model)`);
       }
+    } catch (error: any) {
+      console.error('Error creating group:', error);
+      throw new Error(`Failed to create group: ${error.message || error}`);
     }
   }
 }

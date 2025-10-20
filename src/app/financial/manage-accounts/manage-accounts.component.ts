@@ -11,6 +11,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { FinancialService } from '../../core/services/financial.service';
 import { CreateAccountDialogComponent } from '../create-account/create-account-dialog.component';
 import { ChargeCodeDialogComponent } from '../charge-code/charge-code-dialog.component';
+import { EditAccountDialogComponent } from '../edit-account/edit-account-dialog.component';
 import { Account } from '../../core/models/financial.model';
 
 @Component({
@@ -64,7 +65,22 @@ export class ManageAccountsComponent implements OnInit {
 
   onAccountSelect() {
     if (this.selectedAccountId) {
-      this.router.navigate(['/accounts/edit', this.selectedAccountId]);
+      const account = this.accounts.find(a => a.id === this.selectedAccountId);
+      if (account) {
+        const dialogRef = this.dialog.open(EditAccountDialogComponent, {
+          width: '600px',
+          data: { account },
+        });
+
+        dialogRef.afterClosed().subscribe(async (result: Account | undefined) => {
+          if (result) {
+            await this.loadAccounts();
+            this.snackBar.open('Account updated successfully!', 'OK', { duration: 2000 });
+          }
+          this.selectedAccountId = ''; // Reset selection
+          this.cdr.markForCheck();
+        });
+      }
     }
   }
 
