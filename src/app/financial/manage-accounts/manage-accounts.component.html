@@ -1,0 +1,81 @@
+
+<!-- src/app/financial/manage-accounts/manage-accounts.component.html -->
+
+<div class="container mx-auto p-4 max-w-7xl">
+  <!-- Header -->
+  <header class="flex justify-between items-center mb-8">
+    <h1 class="text-3xl font-bold text-gray-900">Manage Accounts</h1>
+    <a
+      routerLink="/start"
+      class="text-blue-600 hover:text-blue-700 font-semibold"
+      aria-label="Back to Dashboard"
+    >
+      Back to Dashboard
+    </a>
+  </header>
+
+  <!-- Action Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <!-- Create Account Card -->
+    <div class="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+      <h2 class="text-xl font-semibold mb-2 text-gray-900">Create Account</h2>
+      <p class="text-gray-600 mb-4">Create a new financial account with initial details.</p>
+      <button
+        mat-raised-button
+        color="primary"
+        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md w-full"
+        (click)="openCreateAccountDialog()"
+        aria-label="Create New Account"
+      >
+        Create Account
+      </button>
+    </div>
+
+    <!-- View Accounts Card -->
+    <div class="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+      <h2 class="text-xl font-semibold mb-2 text-gray-900">View Accounts</h2>
+      <p class="text-gray-600 mb-4">Browse and view all financial accounts.</p>
+      <a
+        routerLink="/accounts/list"
+        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md inline-block w-full text-center"
+        aria-label="View Accounts List"
+      >
+        View Accounts
+      </a>
+    </div>
+
+    <!-- Edit Account Card -->
+    <div class="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+      <h2 class="text-xl font-semibold mb-2 text-gray-900">Edit Account</h2>
+      <p class="text-gray-600 mb-4">Select an account to edit details or add funds.</p>
+      <select
+        [(ngModel)]="selectedAccountId"
+        class="w-full border border-gray-300 rounded-md px-3 py-2 mb-4 bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        (change)="onAccountSelect()"
+        aria-label="Select account to edit"
+      >
+        <option value="">Select an account</option>
+        <option *ngFor="let account of accounts" [value]="account.id">
+          {{ account.name }} ({{ account.accountNumber }})
+        </option>
+      </select>
+    </div>
+
+    <!-- Manage Charge Codes Card -->
+    <div class="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+      <h2 class="text-xl font-semibold mb-2 text-gray-900">Manage Charge Codes</h2>
+      <p class="text-gray-600 mb-4">Create or assign charge codes and manage user groups.</p>
+      <select
+        [(ngModel)]="selectedAccountId"
+        class="w-full border border-gray-300 rounded-md px-3 py-2 mb-4 bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        (change)="onChargeCodeSelect()"
+        aria-label="Select account for charge codes"
+      >
+        <option value="">Select an account</option>
+        <option *ngFor="let account of accounts" [value]="account.id">
+          {{ account.name }} ({{ account.accountNumber }})
+        </option>
+      </select>
+    </div>
+  </div>
+</div>

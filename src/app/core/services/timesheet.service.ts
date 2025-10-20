@@ -70,34 +70,6 @@ export class TimesheetService {
     return data as TimesheetEntry;
   }
 
-  // New: Update existing entry (for drag-drop/edit)
-  // async updateEntry(entry: TimesheetEntry, timesheetId: string): Promise<TimesheetEntry> {
-  //   const { data: existing } = await (this.client.models as any)['TimesheetEntry'].list({
-  //     filter: { timesheetId: { eq: timesheetId }, date: { eq: entry.date } },
-  //   });
-  //   const dailyTotal = (existing as TimesheetEntry[]).reduce((sum, e) => sum + e.hours, 0) - entry.hours + entry.hours;  // Adjust for self
-  //   if (dailyTotal > 8) throw new Error('Daily hours exceed 8');
-
-  //   const weekStart = startOfWeek(new Date(entry.date)).toISOString().split('T')[0];
-  //   const weekEnd = addDays(new Date(weekStart), 6).toISOString().split('T')[0];
-  //   const { data: weekEntries } = await (this.client.models as any)['TimesheetEntry'].list({
-  //     filter: { timesheetId: { eq: timesheetId }, date: { between: [weekStart, weekEnd] } },
-  //   });
-  //   const weeklyTotal = (weekEntries as TimesheetEntry[]).reduce((sum, e) => sum + e.hours, 0) - entry.hours + entry.hours;
-  //   if (weeklyTotal > 40) throw new Error('Weekly hours exceed 40');
-
-  //   const groups = await firstValueFrom(this.authService.getUserGroups());
-  //   const group = `chargecode-${entry.chargeCode}`;
-  //   if (!groups.includes(group)) throw new Error(`Access denied: Not in group ${group}`);
-
-  //   const { data } = await (this.client.models as any)['TimesheetEntry'].update({
-  //     id: entry.id,
-  //     data: entry,
-  //   });
-  //   await this.updateTotals(timesheetId);
-  //   return data as TimesheetEntry;
-  // }
-
   async updateEntry(entry: TimesheetEntry, timesheetId: string): Promise<TimesheetEntry> {
     // Fetch original entry to calculate old hours for adjustment
     const { data: originalEntry } = await (this.client.models as any)['TimesheetEntry'].get({ id: entry.id });

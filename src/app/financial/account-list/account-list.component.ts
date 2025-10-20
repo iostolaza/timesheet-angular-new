@@ -9,7 +9,7 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import { CommonModule, CurrencyPipe } from '@angular/common';
 import { FinancialService } from '../../core/services/financial.service';
-import { ChargeCodesDialogComponent } from '../../financial/charge-code/charge-codes-dialog.component';
+// import { ChargeCodeDialogComponent } from '../charge-code/charge-code-dialog.component';
 import { CreateAccountDialogComponent } from '../../financial/create-account/create-account-dialog.component';
 import { Account } from '../../core/models/financial.model';
 
@@ -58,10 +58,10 @@ export class AccountListComponent implements OnInit {
     console.log('Charge for', account);
   }
 
-  manageChargeCodes(account: Account) {
-    this.dialog.open(ChargeCodesDialogComponent, {
-      width: '500px',
-      data: { account },
-    });
-  }
+  // manageChargeCodes(account: Account) {
+  //   this.dialog.open(ChargeCodeDialogComponent, {
+  //     width: '500px',
+  //     data: { account },
+  //   });
+  // }
 }

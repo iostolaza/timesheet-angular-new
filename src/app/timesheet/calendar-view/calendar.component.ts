@@ -24,7 +24,7 @@ import { TimesheetService } from '../../core/services/timesheet.service';
 import { AuthService } from '../../core/services/auth.service';
 import { TimesheetEntry } from '../../core/models/timesheet.model';
 import { DayEntryDialogComponent } from './day-entry-dialog.component';
-import { ChargeCodeDialogComponent } from './charge-code-dialog.component';
+import { ChargeCodeDialogComponent } from '../../financial/charge-code/charge-code-dialog.component';
 import { format, startOfWeek, endOfWeek } from 'date-fns';
 
 export interface ChargeCode {

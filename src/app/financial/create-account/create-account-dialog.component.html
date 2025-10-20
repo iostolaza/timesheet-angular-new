@@ -1,70 +1,85 @@
 
 <!-- src/app/financial/create-account/create-account-dialog.component.html -->
 
-<div class="container mx-auto p-4 max-w-lg">
-  <h2 mat-dialog-title class="text-2xl font-bold text-gray-900 mb-4">Create Account</h2>
-  <mat-dialog-content class="max-h-96 overflow-y-auto space-y-4">
-    <form [formGroup]="form" class="space-y-4">
-      <mat-form-field appearance="outline" class="w-full">
-        <mat-label>Name</mat-label>
-        <input matInput formControlName="name" required>
-        <mat-error *ngIf="form.get('name')?.hasError('required')" class="error">Name is required</mat-error>
-      </mat-form-field>
+<div class="bg-white rounded-2xl shadow-xl p-6">
+  <h2 class="text-2xl font-bold text-gray-800 mb-4">Create Account</h2>
 
-      <mat-form-field appearance="outline" class="w-full">
-        <mat-label>Description</mat-label>
-        <textarea matInput formControlName="description" rows="3"></textarea>
-      </mat-form-field>
+  <form [formGroup]="accountForm" class="space-y-4">
+    <!-- Name -->
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+      <input
+        type="text"
+        formControlName="name"
+        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        placeholder="Account name"
+        [attr.aria-required]="accountForm.get('name')?.hasError('required')"
+      />
+      <div *ngIf="accountForm.get('name')?.hasError('required') && accountForm.get('name')?.touched" class="text-red-500 text-sm mt-1">Name is required</div>
+      <div *ngIf="accountForm.get('name')?.hasError('minlength') && accountForm.get('name')?.touched" class="text-red-500 text-sm mt-1">Name must be at least 3 characters</div>
+    </div>
 
-      <mat-form-field appearance="outline" class="w-full">
-        <mat-label>Starting Balance</mat-label>
-        <input matInput type="number" formControlName="startingBalance" required>
-        <mat-error *ngIf="form.get('startingBalance')?.hasError('required')" class="error">Starting balance is required</mat-error>
-      </mat-form-field>
+    <!-- Description -->
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+      <textarea
+        formControlName="description"
+        rows="2"
+        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        placeholder="Optional description"
+      ></textarea>
+    </div>
 
-      <mat-form-field appearance="outline" class="w-full">
-        <mat-label>Type</mat-label>
-        <mat-select formControlName="type" required>
-          <mat-option value="Asset">Asset</mat-option>
-          <mat-option value="Liability">Liability</mat-option>
-          <mat-option value="Equity">Equity</mat-option>
-          <mat-option value="Revenue">Revenue</mat-option>
-          <mat-option value="Expense">Expense</mat-option>
-        </mat-select>
-        <mat-error *ngIf="form.get('type')?.hasError('required')" class="error">Type is required</mat-error>
-      </mat-form-field>
+    <!-- Starting Balance -->
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Starting Balance</label>
+      <input
+        type="number"
+        formControlName="startingBalance"
+        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        placeholder="0.00"
+      />
+      <div *ngIf="accountForm.get('startingBalance')?.hasError('min') && accountForm.get('startingBalance')?.touched" class="text-red-500 text-sm mt-1">Balance cannot be negative</div>
+    </div>
 
-      <mat-form-field appearance="outline" class="w-full">
-        <mat-label>Hourly Rate</mat-label>
-        <input matInput type="number" formControlName="rate" required>
-        <mat-error *ngIf="form.get('rate')?.hasError('required')" class="error">Rate is required</mat-error>
-      </mat-form-field>
+    <!-- Account Type -->
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Account Type</label>
+      <select
+        formControlName="type"
+        class="w-full border border-gray-300 rounded-md px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        [attr.aria-required]="accountForm.get('type')?.hasError('required')"
+      >
+        <option value="">Select type</option>
+        <option value="Asset">Asset</option>
+        <option value="Liability">Liability</option>
+        <option value="Revenue">Revenue</option>
+        <option value="Expense">Expense</option>
+      </select>
+      <div *ngIf="accountForm.get('type')?.hasError('required') && accountForm.get('type')?.touched" class="text-red-500 text-sm mt-1">Account type is required</div>
+    </div>
+  </form>
 
-      <!-- Charge Codes Section -->
-      <div formArrayName="chargeCodes">
-        <h3 class="text-lg font-semibold text-gray-900 mb-2">Charge Codes</h3>
-        <div class="space-y-2" *ngFor="let control of chargeCodesFormArray.controls; let i = index" [formGroupName]="i">
-          <mat-form-field appearance="outline" class="w-full">
-            <mat-label>Charge Code Name</mat-label>
-            <input matInput formControlName="name" required>
-            <mat-error *ngIf="getChargeCodeControl(i)?.get('name')?.hasError('required')" class="error">Name is required</mat-error>
-          </mat-form-field>
-          <div class="flex justify-between items-center">
-            <span class="text-sm text-gray-600">Code: {{ getChargeCodeDisplay(i) }}</span>
-            <button type="button" mat-icon-button color="warn" (click)="removeChargeCode(i)" class="text-red-500 hover:text-red-600">
-              <mat-icon>delete</mat-icon>
-            </button>
-          </div>
-        </div>
-        <div class="flex gap-2 mt-4">
-          <button type="button" class="btn btn-primary" (click)="addChargeCode()">Add Charge Code</button>
-          <button type="button" class="btn btn-primary" (click)="addAutoChargeCode()">Add Auto Charge Code</button>
-        </div>
-      </div>
-    </form>
-  </mat-dialog-content>
-  <mat-dialog-actions class="p-4 bg-gray-50 border-t flex justify-end gap-2">
-    <button mat-button class="btn btn-outline" (click)="dialogRef.close()">Cancel</button>
-    <button mat-raised-button class="btn btn-primary" (click)="save()" [disabled]="form.invalid">Save</button>
-  </mat-dialog-actions>
+  <!-- Buttons -->
+  <div class="mt-6 flex justify-end gap-3">
+    <button
+      mat-button
+      class="border border-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-100"
+      (click)="cancel()"
+      aria-label="Cancel"
+    >
+      Cancel
+    </button>
+
+    <button
+      mat-raised-button
+      color="primary"
+      class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
+      (click)="save()"
+      [disabled]="accountForm.invalid"
+      aria-label="Create account"
+    >
+      Create
+    </button>
+  </div>
 </div>

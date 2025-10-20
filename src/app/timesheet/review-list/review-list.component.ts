@@ -34,7 +34,7 @@ export class ReviewListComponent implements OnInit {
   }
 
   async edit(id: string) {
-    console.log('Edit timesheet', id); // Stub: Nav to calendar
+    console.log('Edit timesheet', id); 
   }
 
   async resubmit(id: string) {

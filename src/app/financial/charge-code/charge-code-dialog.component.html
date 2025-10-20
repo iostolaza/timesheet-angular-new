@@ -1,0 +1,47 @@
+
+<!-- src/app/financial/charge-codes-dialog.component.html -->
+
+<!-- <div class="container mx-auto p-4 max-w-lg rounded-lg">
+  <h2 mat-dialog-title class="text-2xl font-bold text-gray-900 mb-4" aria-label="Dialog title">
+    {{ mode === 'create' ? 'Create Charge Code' : 'Select Charge Codes' }}
+  </h2>
+  <mat-dialog-content class="max-h-96 overflow-y-auto space-y-4">
+    <div *ngIf="errorMessage" class="text-red-500 mb-4" role="alert">{{ errorMessage }}</div>
+    <ng-container *ngIf="mode === 'create'; else selectMode">
+      <form [formGroup]="form" class="space-y-4" (ngSubmit)="save()">
+        <mat-form-field appearance="outline" class="w-full">
+          <mat-label>Charge Code Name</mat-label>
+          <input matInput formControlName="name" required aria-required="true" placeholder="Enter charge code name">
+          <mat-error *ngIf="form.get('name')?.hasError('required')">Name is required</mat-error>
+          <mat-error *ngIf="form.get('name')?.hasError('minlength')">Name must be at least 3 characters</mat-error>
+        </mat-form-field>
+        <div class="flex gap-2 mt-4">
+          <button type="submit" mat-raised-button color="primary" [disabled]="form.invalid" aria-label="Save charge code">Save</button>
+          <button type="button" mat-button color="basic" (click)="dialogRef.close()" aria-label="Cancel">Cancel</button>
+        </div>
+      </form>
+    </ng-container>
+    <ng-template #selectMode>
+      <h3 class="text-lg font-semibold text-gray-900 mb-2" aria-label="Available Charge Codes">Available Charge Codes</h3>
+      <mat-list class="divide-y divide-gray-200">
+        <mat-list-item *ngFor="let code of availableCodes" class="py-2">
+          <mat-checkbox class="mr-3" [(ngModel)]="code.active" [attr.aria-label]="'Select ' + code.name"></mat-checkbox>
+          <span class="flex-1 text-gray-700">{{ code.name }} ({{ code.linkedAccount }})</span>
+        </mat-list-item>
+      </mat-list>
+      <h3 class="mt-6 text-lg font-semibold text-gray-900 mb-2" aria-label="Active Charge Codes">Active Charge Codes</h3>
+      <mat-list class="divide-y divide-gray-200">
+        <mat-list-item *ngFor="let code of data.chargeCodes" class="py-2">
+          <span class="flex-1 text-gray-700">{{ code.name }}</span>
+          <button mat-icon-button color="warn" (click)="removeCode(code)" aria-label="Remove charge code">
+            <mat-icon>remove</mat-icon>
+          </button>
+        </mat-list-item>
+      </mat-list>
+      <div class="mt-4 flex gap-2">
+        <button mat-raised-button color="primary" (click)="save()" aria-label="Save selected charge codes">Save</button>
+        <button mat-button color="basic" (click)="dialogRef.close()" aria-label="Cancel">Cancel</button>
+      </div>
+    </ng-template>
+  </mat-dialog-content>
+</div> -->
