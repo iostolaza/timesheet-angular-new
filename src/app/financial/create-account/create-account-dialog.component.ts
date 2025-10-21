@@ -6,10 +6,8 @@ import { MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { CommonModule } from '@angular/common';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { FinancialService } from '../../core/services/financial.service';
-import { AuthService } from '../../core/services/auth.service';
 import { Account } from '../../core/models/financial.model';
 import { format } from 'date-fns';
-import { firstValueFrom } from 'rxjs';
 
 @Component({
   selector: 'app-create-account-dialog',
@@ -30,7 +28,6 @@ export class CreateAccountDialogComponent {
     public dialogRef: MatDialogRef<CreateAccountDialogComponent>,
     private fb: FormBuilder,
     private financialService: FinancialService,
-    private authService: AuthService,
     private snackBar: MatSnackBar
   ) {
     this.accountForm = this.fb.group({
@@ -48,11 +45,6 @@ export class CreateAccountDialogComponent {
       return;
     }
     try {
-      const isAdmin = await this.authService.isAdmin();
-      const isManager = await this.authService.isManager();
-      if (!isAdmin && !isManager) {
-        throw new Error('Admin or Manager access required');
-      }
       const formValue = this.accountForm.value;
       const accountData: Omit<Account, 'id' | 'accountNumber'> = {
         name: formValue.name,
