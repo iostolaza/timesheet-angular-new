@@ -8,7 +8,7 @@ import { MatListModule } from '@angular/material/list';
 import { MatInputModule } from '@angular/material/input';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormControl } from '@angular/forms';
-import { AuthService } from '../../core/services/auth.service';
+import { FinancialService } from '../../core/services/financial.service';
 import { User } from '../../core/models/financial.model';
 
 interface DialogData {
@@ -41,7 +41,7 @@ export class ChargeCodeDialogComponent {
   constructor(
     public dialogRef: MatDialogRef<ChargeCodeDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: DialogData,
-    private authService: AuthService,
+    private financialService: FinancialService,
     private cdr: ChangeDetectorRef
   ) {
     this.loadUsers();
@@ -49,7 +49,7 @@ export class ChargeCodeDialogComponent {
 
   async loadUsers() {
     try {
-      this.users = await this.authService.listUsers();
+      this.users = await this.financialService.listUsers();
       this.filteredUsers = this.users;
       this.cdr.markForCheck();
     } catch (error: any) {
@@ -71,7 +71,7 @@ export class ChargeCodeDialogComponent {
       const selectedEmails = this.selectedUsers.value || [];
       const groupName = `chargecode-${this.data.chargeCodeName}`;
       for (const email of selectedEmails) {
-        await this.authService.addUserToGroup(email, groupName);
+        await this.financialService.addUserToGroup(email, groupName);
       }
       this.dialogRef.close();
     } catch (error: any) {

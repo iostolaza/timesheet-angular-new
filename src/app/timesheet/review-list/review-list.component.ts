@@ -6,7 +6,7 @@ import { CommonModule } from '@angular/common';
 import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, from } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { TimesheetService } from '../../core/services/timesheet.service';
 import { ReviewFormComponent } from '../review-form/review-form.component';
@@ -28,13 +28,13 @@ export class ReviewListComponent implements OnInit {
 
   async ngOnInit() {
     this.dataSource = await this.tsService.listTimesheets('submitted');
-    const groups = await firstValueFrom(this.authService.getUserGroups());
+    const groups = await firstValueFrom(from(this.authService.getUserGroups()));
     this.isManager = groups.includes('Manager') || groups.includes('Admin');
     if (this.isManager) this.displayedColumns.push('approve');
   }
 
   async edit(id: string) {
-    console.log('Edit timesheet', id); 
+    console.log('Edit timesheet', id);
   }
 
   async resubmit(id: string) {

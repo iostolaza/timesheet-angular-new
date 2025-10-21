@@ -2,7 +2,7 @@
 
 import { Routes } from '@angular/router';
 import { inject } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, from } from 'rxjs';
 import { AuthService } from './core/services/auth.service';
 
 const authGuard = () => {
@@ -12,8 +12,8 @@ const authGuard = () => {
 
 const managerGuard = () => {
   const authService = inject(AuthService);
-  return () => firstValueFrom(authService.getUserGroups()).then(groups => {
-    return groups.includes('Manager') || groups.includes('Admin') ? true : '/calendar';
+  return () => firstValueFrom(from(authService.getUserGroups())).then(groups => {
+    return (groups as string[]).includes('Manager') || (groups as string[]).includes('Admin') ? true : '/calendar';
   });
 };
 
@@ -25,7 +25,6 @@ export const routes: Routes = [
   { path: 'review', loadComponent: () => import('./timesheet/review-list/review-list.component').then(m => m.ReviewListComponent), canActivate: [authGuard, managerGuard] },
   { path: 'accounts/manage', loadComponent: () => import('./financial/manage-accounts/manage-accounts.component').then(m => m.ManageAccountsComponent), canActivate: [authGuard, managerGuard] },
   { path: 'accounts/list', loadComponent: () => import('./financial/account-list/account-list.component').then(m => m.AccountListComponent), canActivate: [authGuard, managerGuard] },
-  // { path: 'accounts/edit/:id', loadComponent: () => import('./financial/financial-account/financial-account.component').then(m => m.FinancialAccountComponent), canActivate: [authGuard, managerGuard] },
   { path: 'accounts/ledger', loadComponent: () => import('./financial/ledger-view/ledger-view.component').then(m => m.LedgerViewComponent), canActivate: [authGuard, managerGuard] },
   { path: 'accounts/ledger/:id', loadComponent: () => import('./financial/ledger-view/ledger-view.component').then(m => m.LedgerViewComponent), canActivate: [authGuard, managerGuard] },
   { path: '**', redirectTo: '/start' },

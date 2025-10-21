@@ -1,4 +1,3 @@
-
 // file: src/app/financial/edit-account/edit-account-dialog.component.ts
 import { Component, Inject, ChangeDetectorRef, inject } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule, MatDialog } from '@angular/material/dialog';
@@ -11,7 +10,7 @@ import { FinancialService } from '../../core/services/financial.service';
 import { AuthService } from '../../core/services/auth.service';
 import { Account, Transaction } from '../../core/models/financial.model';
 import { ChargeCodeDialogComponent } from '../charge-code/charge-code-dialog.component';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, from } from 'rxjs';
 import { format } from 'date-fns';
 
 @Component({
@@ -44,7 +43,6 @@ export class EditAccountDialogComponent {
     private authService: AuthService,
     private cdr: ChangeDetectorRef
   ) {
-    // Initialize form with account data
     this.form = this.fb.group({
       id: [{ value: data.account.id, disabled: true }],
       accountNumber: [{ value: data.account.accountNumber, disabled: true }],
@@ -55,7 +53,6 @@ export class EditAccountDialogComponent {
       type: [data.account.type, Validators.required],
     });
 
-    // Map charge codes to display format
     this.chargeCodes = (data.account.chargeCodes || []).map((cc, index) => ({
       name: cc.name,
       linkedAccount: data.account.accountNumber,
@@ -70,7 +67,7 @@ export class EditAccountDialogComponent {
 
   async addChargeCode() {
     try {
-      const groups = await firstValueFrom(this.authService.getUserGroups());
+      const groups = await firstValueFrom(from(this.authService.getUserGroups()));
       if (!groups.includes('Admin')) {
         this.errorMessage = 'Admin access required to create charge codes';
         this.cdr.markForCheck();
@@ -85,18 +82,14 @@ export class EditAccountDialogComponent {
         date: new Date().toISOString(),
       };
 
-      // Add to local array
       this.chargeCodes.push({
         name: newChargeCode.name,
         linkedAccount: this.data.account.accountNumber,
         id: `${this.data.account.accountNumber}-${this.chargeCodes.length}`,
       });
 
-      // Create Cognito group
-      await this.authService.createGroup(newChargeCode.cognitoGroup!);
+      await this.financialService.createGroup(newChargeCode.cognitoGroup!);
       this.cdr.markForCheck();
-
-      // Open dialog to assign users
       this.openChargeCodeDialog(newChargeCode.name);
     } catch (error: any) {
       this.errorMessage = `Failed to add charge code: ${error.message || 'Unknown error'}`;
@@ -106,7 +99,7 @@ export class EditAccountDialogComponent {
 
   async openChargeCodeDialog(chargeCodeName: string) {
     try {
-      const groups = await firstValueFrom(this.authService.getUserGroups());
+      const groups = await firstValueFrom(from(this.authService.getUserGroups()));
       if (!groups.includes('Admin')) {
         this.errorMessage = 'Admin access required to manage charge code users';
         this.cdr.markForCheck();
@@ -140,16 +133,15 @@ export class EditAccountDialogComponent {
     }
 
     try {
-      const groups = await firstValueFrom(this.authService.getUserGroups());
+      const groups = await firstValueFrom(from(this.authService.getUserGroups()));
       if (!groups.includes('Admin')) {
         throw new Error('Admin access required');
       }
 
-      const formValue = this.form.getRawValue(); // Get all values including disabled
+      const formValue = this.form.getRawValue();
       const addFunds = formValue.addFunds || 0;
       const newBalance = this.data.account.balance + addFunds;
 
-      // Create transaction if funds added
       if (addFunds > 0) {
         const transaction: Omit<Transaction, 'id' | 'runningBalance' | 'date'> = {
           accountId: this.data.account.id,
@@ -160,7 +152,6 @@ export class EditAccountDialogComponent {
         await this.financialService.createTransaction(transaction);
       }
 
-      // Update account with new charge codes
       const updatedChargeCodes = this.chargeCodes.map(cc => ({
         name: cc.name,
         cognitoGroup: `chargecode-${cc.name}`,

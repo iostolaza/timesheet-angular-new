@@ -1,6 +1,4 @@
-
-// src/app/financial/create-account/create-account-dialog.component.ts
-
+// file: src/app/financial/create-account/create-account-dialog.component.ts
 import { Component } from '@angular/core';
 import { ReactiveFormsModule, FormBuilder, Validators, FormGroup } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -50,9 +48,10 @@ export class CreateAccountDialogComponent {
       return;
     }
     try {
-      const groups = await firstValueFrom(this.authService.getUserGroups());
-      if (!groups.includes('Admin')) {
-        throw new Error('Admin access required');
+      const isAdmin = await this.authService.isAdmin();
+      const isManager = await this.authService.isManager();
+      if (!isAdmin && !isManager) {
+        throw new Error('Admin or Manager access required');
       }
       const formValue = this.accountForm.value;
       const accountData: Omit<Account, 'id' | 'accountNumber'> = {
@@ -60,7 +59,7 @@ export class CreateAccountDialogComponent {
         details: formValue.details || undefined,
         balance: formValue.startingBalance ?? 0,
         startingBalance: formValue.startingBalance ?? 0,
-        endingBalance: formValue.startingBalance ?? 0, // Added: Set initial endingBalance for audit
+        endingBalance: formValue.startingBalance ?? 0,
         date: format(new Date(), 'yyyy-MM-dd'),
         type: formValue.type,
         chargeCodes: [],

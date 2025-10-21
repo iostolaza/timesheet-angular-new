@@ -1,17 +1,27 @@
-// file: src/app/core/services/financial.service.ts
+
+// src/app/core/services/financial.service.ts
+
 import { Injectable } from '@angular/core';
 import { generateClient } from 'aws-amplify/data';
 import { firstValueFrom } from 'rxjs';
 import { v4 as uuidv4 } from 'uuid';
-import type { Schema } from '../../../../amplify/data/resource'; // Import from generated client
-import { Account, Transaction, AccountModel, TransactionModel } from '../models/financial.model';
+import type { Schema } from '../../../../amplify/data/resource';
+import { Account, Transaction, AccountModel, TransactionModel, User } from '../models/financial.model';
 import { AuthService } from './auth.service';
+import { CognitoIdentityProviderClient, CreateGroupCommand, AdminAddUserToGroupCommand, AdminRemoveUserFromGroupCommand } from '@aws-sdk/client-cognito-identity-provider';
 
 @Injectable({ providedIn: 'root' })
 export class FinancialService {
   private client = generateClient<Schema>();
+  private cognitoClient: CognitoIdentityProviderClient;
+  private userPoolId: string;
 
-  constructor(private authService: AuthService) {}
+  constructor(private authService: AuthService) {
+    this.userPoolId = 'us-west-1_KfNSgZaRI';
+    this.cognitoClient = new CognitoIdentityProviderClient({
+      region: 'us-west-1',
+    });
+  }
 
   /* ---------------------- TYPE MAPPING HELPERS ---------------------- */
 
@@ -94,6 +104,28 @@ export class FinancialService {
     return this.mapAccountFromSchema(data as AccountModel);
   }
 
+  // async getAccountByNumber(accountNumber: string): Promise<Account | null> {
+  //   const { data, errors } = await this.client.models.Account.list({
+  //     filter: { accountNumber: { eq: accountNumber } }
+  //   });
+  //   if (errors?.length) {
+  //     throw new Error(`Failed to get account: ${errors.map(e => e.message).join(', ')}`);
+  //   }
+  //   if (data.length === 0) return null;
+  //   return this.mapAccountFromSchema(data[0]);
+  // }
+
+async getAccountByNumber(accountNumber: string): Promise<Account | null> {
+    const { data, errors } = await this.client.models.Account.list({
+      filter: { accountNumber: { eq: accountNumber } }
+    });
+    if (errors?.length) {
+      throw new Error(`Failed to get account: ${errors.map(e => e.message).join(', ')}`);
+    }
+    if (data.length === 0) return null;
+    return this.mapAccountFromSchema(data[0] as AccountModel);
+  }
+  
   async listAccounts(): Promise<Account[]> {
     const { data, errors } = await this.client.models['Account'].list({ limit: 100 });
     if (errors && errors.length > 0) {
@@ -104,7 +136,7 @@ export class FinancialService {
 
   async updateAccount(id: string, updates: Partial<Account>): Promise<Account> {
     const input: AccountModel = {
-      id, // Ensure id is non-optional
+      id,
       accountNumber: '',
       name: '',
       balance: 0,
@@ -199,7 +231,7 @@ export class FinancialService {
 
     const updatedChargeCodes = [...(account.chargeCodes ?? []), chargeCode];
     await this.updateAccount(account.id, { balance: account.balance, endingBalance: account.endingBalance, chargeCodes: updatedChargeCodes });
-    await this.authService.createGroup(chargeCode.cognitoGroup);
+    await this.createGroup(chargeCode.cognitoGroup);
 
     return chargeCode;
   }
@@ -207,6 +239,125 @@ export class FinancialService {
   async listChargeCodes(accountId: string): Promise<Account['chargeCodes']> {
     const account = await this.getAccount(accountId);
     return account.chargeCodes ?? [];
+  }
+
+  /* ---------------------- GROUP MANAGEMENT ---------------------- */
+
+  async createGroup(groupName: string): Promise<void> {
+    try {
+      const isAdmin = await this.authService.isAdmin();
+      if (!isAdmin) {
+        throw new Error('Admin access required to create groups');
+      }
+      const command = new CreateGroupCommand({
+        UserPoolId: this.userPoolId,
+        GroupName: groupName,
+      });
+      await this.cognitoClient.send(command);
+      console.log(`Group ${groupName} created`);
+    } catch (error: any) {
+      console.error('Error creating group:', error);
+      throw new Error(`Failed to create group: ${error.message || error}`);
+    }
+  }
+
+  async addUserToGroup(email: string, groupName: string): Promise<void> {
+    try {
+      const isAdmin = await this.authService.isAdmin();
+      if (!isAdmin) {
+        throw new Error('Admin access required to manage groups');
+      }
+      const command = new AdminAddUserToGroupCommand({
+        UserPoolId: this.userPoolId,
+        Username: email,
+        GroupName: groupName,
+      });
+      await this.cognitoClient.send(command);
+      const users = await this.listUsers();
+      const user = users.find(u => u.email === email);
+      if (!user) {
+        throw new Error(`User with email ${email} not found`);
+      }
+      const currentGroups = user.groups || [];
+      if (!currentGroups.includes(groupName)) {
+        const updatedGroups = [...currentGroups, groupName];
+        await this.updateUserGroups(user.id, updatedGroups);
+      }
+      console.log(`Added user ${email} to group ${groupName}`);
+    } catch (error: any) {
+      console.error('Error adding user to group:', error);
+      throw new Error(`Failed to add user to group: ${error.message || error}`);
+    }
+  }
+
+  async removeUserFromGroup(email: string, groupName: string): Promise<void> {
+    try {
+      const isAdmin = await this.authService.isAdmin();
+      if (!isAdmin) {
+        throw new Error('Admin access required to manage groups');
+      }
+      const command = new AdminRemoveUserFromGroupCommand({
+        UserPoolId: this.userPoolId,
+        Username: email,
+        GroupName: groupName,
+      });
+      await this.cognitoClient.send(command);
+      const users = await this.listUsers();
+      const user = users.find(u => u.email === email);
+      if (user) {
+        const updatedGroups = (user.groups || []).filter(g => g !== groupName);
+        await this.updateUserGroups(user.id, updatedGroups);
+      }
+      console.log(`Removed user ${email} from group ${groupName}`);
+    } catch (error: any) {
+      console.error('Error removing user from group:', error);
+      throw new Error(`Failed to remove user from group: ${error.message || error}`);
+    }
+  }
+
+  private async updateUserGroups(userId: string, groups: string[]): Promise<void> {
+    try {
+      const { data, errors } = await (this.client.models as any)['User'].update({
+        id: userId,
+        groups,
+      });
+      if (errors?.length) {
+        throw new Error(`Failed to update user groups: ${errors.map((e: any) => e.message).join(', ')}`);
+      }
+      console.log('Updated user groups:', data);
+    } catch (error) {
+      console.error('Error updating user groups:', error);
+      throw error;
+    }
+  }
+
+  async listUsers(): Promise<User[]> {
+    try {
+      const { data, errors } = await (this.client.models as any)['User'].list({});
+      if (errors?.length) {
+        throw new Error(`Failed to list users: ${errors.map((e: any) => e.message).join(', ')}`);
+      }
+      return (data ?? []) as User[];
+    } catch (error) {
+      console.error('Error listing users:', error);
+      throw error;
+    }
+  }
+
+  async createUserIfNotExists(user: User): Promise<void> {
+    try {
+      await this.getUserById(user.id);
+      console.log('User already exists:', user.id);
+    } catch (err) {
+      const { data } = await (this.client.models as any)['User'].create(user);
+      console.log('Created new User:', data);
+    }
+  }
+
+  async getUserById(id: string): Promise<User> {
+    const { data } = await (this.client.models as any)['User'].get({ id });
+    if (!data) throw new Error(`User with id ${id} not found`);
+    return data as User;
   }
 
   /* ---------------------- FUNDS HELPERS ---------------------- */
