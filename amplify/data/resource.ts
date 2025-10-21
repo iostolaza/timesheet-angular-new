@@ -5,8 +5,9 @@ specifies that any unauthenticated user can "create", "read", "update",
 and "delete" any "Todo" records.
 =========================================================================*/
 
+
+// file: amplify/data/resource.ts
 import { a, defineData } from '@aws-amplify/backend';
-import { auth } from '../auth/resource.js';
 
 const schema = a.schema({
   User: a
@@ -18,11 +19,13 @@ const schema = a.schema({
       rate: a.float().required(),
       groups: a.string().array(),
     })
-    .authorization((allow) => [
-      allow.ownerDefinedIn('id').to(['create', 'read', 'update', 'delete']),
+    .authorization(allow => [
+      allow.groups(['Admin']).to(['create', 'read', 'update']),
+      allow.groups(['Manager']).to(['create', 'read', 'update']),
+      allow.groups(['Employee']).to(['create', 'read', 'update']),
       allow.authenticated().to(['create', 'read', 'update']),
-      allow.groups(['Admin']).to(['create', 'read', 'update', 'delete']),
     ]),
+
   Account: a
     .model({
       id: a.id().required(),
@@ -34,14 +37,17 @@ const schema = a.schema({
       endingBalance: a.float(),
       date: a.string().required(),
       type: a.enum(['Asset', 'Liability', 'Equity', 'Revenue', 'Expense']),
-      rate: a.float().required(),
-      chargeCodes: a.string().array(),
+      // FIXED: Use JSON string to store charge codes array
+      chargeCodesJson: a.string(), // Store as JSON string
       transactions: a.hasMany('Transaction', 'accountId'),
     })
-    .authorization((allow) => [
+    .authorization(allow => [
+      allow.groups(['Admin']).to(['create', 'read', 'update']),
+      allow.groups(['Manager']).to(['create', 'read', 'update']),
+      allow.groups(['Employee']).to(['create', 'read', 'update']),
       allow.authenticated().to(['create', 'read', 'update']),
-      allow.groups(['Admin']).to(['create', 'read', 'update', 'delete']),
     ]),
+
   Transaction: a
     .model({
       id: a.id().required(),
@@ -55,10 +61,13 @@ const schema = a.schema({
       runningBalance: a.float().required(),
       account: a.belongsTo('Account', 'accountId'),
     })
-    .authorization((allow) => [
-      allow.authenticated().to(['read', 'create', 'update', 'delete']),
-      allow.groups(['Admin']).to(['create', 'read', 'update', 'delete']),
+    .authorization(allow => [
+      allow.groups(['Admin']).to(['create', 'read', 'update']),
+      allow.groups(['Manager']).to(['create', 'read', 'update']),
+      allow.groups(['Employee']).to(['create', 'read', 'update']),
+      allow.authenticated().to(['create', 'read', 'update']),
     ]),
+
   Timesheet: a
     .model({
       id: a.id().required(),
@@ -69,11 +78,13 @@ const schema = a.schema({
       rejectionReason: a.string(),
       entries: a.hasMany('TimesheetEntry', 'timesheetId'),
     })
-    .authorization((allow) => [
-      allow.owner().to(['create', 'read', 'update', 'delete']),
+    .authorization(allow => [
+      allow.groups(['Admin']).to(['create', 'read', 'update']),
+      allow.groups(['Manager']).to(['create', 'read', 'update']),
+      allow.groups(['Employee']).to(['create', 'read', 'update']),
       allow.authenticated().to(['create', 'read', 'update']),
-      allow.groups(['Admin']).to(['create', 'read', 'update', 'delete']),
     ]),
+
   TimesheetEntry: a
     .model({
       id: a.id().required(),
@@ -87,10 +98,11 @@ const schema = a.schema({
       owner: a.string().required(),
       timesheet: a.belongsTo('Timesheet', 'timesheetId'),
     })
-    .authorization((allow) => [
-      allow.owner().to(['create', 'read', 'update', 'delete']),
+    .authorization(allow => [
+      allow.groups(['Admin']).to(['create', 'read', 'update']),
+      allow.groups(['Manager']).to(['create', 'read', 'update']),
+      allow.groups(['Employee']).to(['create', 'read', 'update']),
       allow.authenticated().to(['create', 'read', 'update']),
-      allow.groups(['Admin']).to(['create', 'read', 'update', 'delete']),
     ]),
 });
 
@@ -102,5 +114,3 @@ export const data = defineData({
 });
 
 export type Schema = typeof schema;
-
-/*== STEP 2 & 3 snippets unchanged ==*/

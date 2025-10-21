@@ -1,6 +1,5 @@
 
-// src/app/core/models/financial.model.ts
-
+// file: src/app/core/models/financial.model.ts
 export interface Account {
   id: string;
   accountNumber: string;
@@ -11,13 +10,7 @@ export interface Account {
   endingBalance?: number;
   date: string;
   type: 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Expense';
-  rate: number;
-  chargeCodes: string[];
-}
-
-export interface ChargeCode {
-  name: string;
-  linkedAccount: string;
+  chargeCodes: { name: string; cognitoGroup?: string; createdBy?: string; date?: string }[];
 }
 
 export interface Transaction {

@@ -1,10 +1,10 @@
 
 // src/app/financial/manage-accounts/manage-accounts.component.ts
 
-import { Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -25,15 +25,15 @@ import { Account } from '../../core/models/financial.model';
     MatDialogModule,
   ],
   templateUrl: './manage-accounts.component.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ManageAccountsComponent implements OnInit {
   accounts: Account[] = [];
+  chargeCodes: Array<{ name: string; linkedAccount: string; id?: string }> = [];
   selectedAccountId: string = '';
+  selectedChargeCode: string = '';
 
   private financialService = inject(FinancialService);
   private dialog = inject(MatDialog);
-  private router = inject(Router);
   private snackBar = inject(MatSnackBar);
   private cdr = inject(ChangeDetectorRef);
 
@@ -44,6 +44,14 @@ export class ManageAccountsComponent implements OnInit {
   async loadAccounts() {
     try {
       this.accounts = await this.financialService.listAccounts();
+      // Flatten charge codes from all accounts
+      this.chargeCodes = this.accounts.flatMap(account =>
+        (account.chargeCodes || []).map((cc, index) => ({
+          name: cc.name,
+          linkedAccount: account.accountNumber,
+          id: `${account.accountNumber}-${index}`,
+        }))
+      );
       this.cdr.markForCheck();
     } catch (error: any) {
       this.snackBar.open(`Failed to load accounts: ${error.message || 'Unknown error'}`, 'OK', { duration: 5000 });
@@ -69,6 +77,7 @@ export class ManageAccountsComponent implements OnInit {
       if (account) {
         const dialogRef = this.dialog.open(EditAccountDialogComponent, {
           width: '600px',
+          maxHeight: '80vh',
           data: { account },
         });
 
@@ -77,7 +86,7 @@ export class ManageAccountsComponent implements OnInit {
             await this.loadAccounts();
             this.snackBar.open('Account updated successfully!', 'OK', { duration: 2000 });
           }
-          this.selectedAccountId = ''; // Reset selection
+          this.selectedAccountId = '';
           this.cdr.markForCheck();
         });
       }
@@ -85,13 +94,16 @@ export class ManageAccountsComponent implements OnInit {
   }
 
   onChargeCodeSelect() {
-    if (this.selectedAccountId) {
-      const account = this.accounts.find(a => a.id === this.selectedAccountId);
-      if (account) {
-        this.dialog.open(ChargeCodeDialogComponent, {
-          width: '500px',
-          data: { account },
-        });
+    if (this.selectedChargeCode) {
+      const chargeCode = this.chargeCodes.find(c => c.name === this.selectedChargeCode);
+      if (chargeCode) {
+        const account = this.accounts.find(a => a.accountNumber === chargeCode.linkedAccount);
+        if (account) {
+          this.dialog.open(ChargeCodeDialogComponent, {
+            width: '600px',
+            data: { chargeCodeName: chargeCode.name, account },
+          });
+        }
       }
     }
   }

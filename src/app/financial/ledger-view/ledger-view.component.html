@@ -1,40 +1,54 @@
 
 <!-- src/app/financial/ledger-view/ledger-view.component.html -->
 
+<!-- file: src/app/financial/ledger-view/ledger-view.component.html -->
 <div class="container mx-auto p-4 max-w-7xl">
   <h1 class="text-3xl font-bold text-gray-900 mb-8">{{ account ? 'Ledger for ' + account.name : 'Global Ledger' }}</h1>
-  <div class="card">
-    <table mat-table [dataSource]="dataSource" class="table w-full">
-      <ng-container matColumnDef="account_name" *ngIf="!account">
-        <th mat-header-cell *matHeaderCellDef class="text-gray-900 font-semibold">Account</th>
-        <td mat-cell *matCellDef="let e" class="text-gray-700">{{ getAccountName(e.account_id) }}</td>
-      </ng-container>
-      <ng-container matColumnDef="date">
-        <th mat-header-cell *matHeaderCellDef class="text-gray-900 font-semibold">Date</th>
-        <td mat-cell *matCellDef="let e" class="text-gray-700">{{ e.date | date:'short' }}</td>
-      </ng-container>
-      <ng-container matColumnDef="ref">
-        <th mat-header-cell *matHeaderCellDef class="text-gray-900 font-semibold">Ref</th>
-        <td mat-cell *matCellDef="let e" class="text-gray-700">{{ e.id }}</td>
-      </ng-container>
-      <ng-container matColumnDef="description">
-        <th mat-header-cell *matHeaderCellDef class="text-gray-900 font-semibold">Description</th>
-        <td mat-cell *matCellDef="let e" class="text-gray-700">{{ e.description }}</td>
-      </ng-container>
-      <ng-container matColumnDef="debit">
-        <th mat-header-cell *matHeaderCellDef class="text-gray-900 font-semibold">Debit</th>
-        <td mat-cell *matCellDef="let e" class="text-gray-700">{{ e.debit ? (e.amount | number:'1.2-2') : '' }}</td>
-      </ng-container>
-      <ng-container matColumnDef="credit">
-        <th mat-header-cell *matHeaderCellDef class="text-gray-900 font-semibold">Credit</th>
-        <td mat-cell *matCellDef="let e" class="text-gray-700">{{ !e.debit ? (e.amount | number:'1.2-2') : '' }}</td>
-      </ng-container>
-      <ng-container matColumnDef="running">
-        <th mat-header-cell *matHeaderCellDef class="text-gray-900 font-semibold">Running Balance</th>
-        <td mat-cell *matCellDef="let e" class="text-gray-700">{{ e.running_balance | number:'1.2-2' }}</td>
-      </ng-container>
-      <tr mat-header-row *matHeaderRowDef="displayedColumns" class="bg-gray-50"></tr>
-      <tr mat-row *matRowDef="let row; columns: displayedColumns" class="hover:bg-gray-100"></tr>
-    </table>
-  </div>
+  
+  @if (loading) {
+    <div class="text-center py-8 text-gray-600">Loading...</div>
+  }
+  
+  @if (error) {
+    <div class="text-red-600 py-4">{{ error }}</div>
+  }
+  
+  @if (!loading && !error) {
+    <div class="card">
+      <table mat-table [dataSource]="dataSource" class="table w-full">
+        @if (!account) {
+          <ng-container matColumnDef="account_name">
+            <th mat-header-cell *matHeaderCellDef class="text-gray-900 font-semibold">Account</th>
+            <td mat-cell *matCellDef="let e" class="text-gray-700">{{ getAccountName(e.accountId) }}</td>
+          </ng-container>
+        }
+        <ng-container matColumnDef="date">
+          <th mat-header-cell *matHeaderCellDef class="text-gray-900 font-semibold">Date</th>
+          <td mat-cell *matCellDef="let e" class="text-gray-700">{{ e.date | date:'short' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="ref">
+          <th mat-header-cell *matHeaderCellDef class="text-gray-900 font-semibold">Ref</th>
+          <td mat-cell *matCellDef="let e" class="text-gray-700">{{ e.id }}</td>
+        </ng-container>
+        <ng-container matColumnDef="description">
+          <th mat-header-cell *matHeaderCellDef class="text-gray-900 font-semibold">Description</th>
+          <td mat-cell *matCellDef="let e" class="text-gray-700">{{ e.description }}</td>
+        </ng-container>
+        <ng-container matColumnDef="debit">
+          <th mat-header-cell *matHeaderCellDef class="text-gray-900 font-semibold">Debit</th>
+          <td mat-cell *matCellDef="let e" class="text-gray-700">{{ e.debit ? (e.amount | number:'1.2-2') : '' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="credit">
+          <th mat-header-cell *matHeaderCellDef class="text-gray-900 font-semibold">Credit</th>
+          <td mat-cell *matCellDef="let e" class="text-gray-700">{{ !e.debit ? (e.amount | number:'1.2-2') : '' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="running">
+          <th mat-header-cell *matHeaderCellDef class="text-gray-900 font-semibold">Running Balance</th>
+          <td mat-cell *matCellDef="let e" class="text-gray-700">{{ e.runningBalance | number:'1.2-2' }}</td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="displayedColumns" class="bg-gray-50"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns" class="hover:bg-gray-100"></tr>
+      </table>
+    </div>
+  }
 </div>

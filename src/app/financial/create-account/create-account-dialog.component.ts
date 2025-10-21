@@ -60,10 +60,10 @@ export class CreateAccountDialogComponent {
         details: formValue.details || undefined,
         balance: formValue.startingBalance ?? 0,
         startingBalance: formValue.startingBalance ?? 0,
+        endingBalance: formValue.startingBalance ?? 0, // Added: Set initial endingBalance for audit
         date: format(new Date(), 'yyyy-MM-dd'),
         type: formValue.type,
         chargeCodes: [],
-        rate: 25.0,
       };
       const account = await this.financialService.createAccount(accountData);
       this.snackBar.open('Account created successfully!', 'OK', { duration: 2000 });

@@ -3,7 +3,7 @@
 
 import { Component, inject, OnInit } from '@angular/core';
 import { MatTableModule } from '@angular/material/table';
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { FinancialService } from '../../core/services/financial.service';
 import { Transaction, Account } from '../../core/models/financial.model';
@@ -11,15 +11,17 @@ import { Transaction, Account } from '../../core/models/financial.model';
 @Component({
   selector: 'app-ledger-view',
   standalone: true,
-  imports: [CommonModule, MatTableModule, DatePipe],
+  imports: [CommonModule, MatTableModule, DatePipe, DecimalPipe],
   templateUrl: './ledger-view.component.html',
 })
 export class LedgerViewComponent implements OnInit {
   displayedColumns: string[] = ['date', 'ref', 'description', 'debit', 'credit', 'running'];
   dataSource: Transaction[] = [];
   account: Account | null = null;
-  loading = false;  // Added: For UX
-  error: string | null = null;  // Added: Error handling
+  accountsMap: Map<string, Account> = new Map();
+  loading = false;
+  error: string | null = null;
+
   private financialService = inject(FinancialService);
   private route = inject(ActivatedRoute);
 
@@ -27,16 +29,22 @@ export class LedgerViewComponent implements OnInit {
     this.loading = true;
     try {
       const id = this.route.snapshot.paramMap.get('id');
+      
       if (id) {
-        this.account = await this.getAccountById(id);
+        // Single account ledger
+        this.account = await this.financialService.getAccount(id);
         this.dataSource = await this.financialService.listTransactions({ accountId: id });
       } else {
+        // Global ledger - need accounts map for names
+        const accounts = await this.financialService.listAccounts();
+        accounts.forEach(acc => this.accountsMap.set(acc.id, acc));
         this.dataSource = await this.financialService.listTransactions();
         this.displayedColumns.unshift('account_name');
       }
-      console.log('Ledger data loaded:', this.dataSource.length, 'transactions');  // Added: Debug log
+
+      console.log('Ledger data loaded:', this.dataSource.length, 'transactions');
     } catch (err) {
-      console.error('Ledger load error:', err);  // Added: Log for "not working"
+      console.error('Ledger load error:', err);
       this.error = 'Failed to load ledger data. Check console.';
     } finally {
       this.loading = false;
@@ -44,13 +52,9 @@ export class LedgerViewComponent implements OnInit {
   }
 
   getAccountName(accountId: string): string {
-    return this.account?.name || 'Unknown Account';  // Updated: Use account if available
-  }
-
-  private async getAccountById(id: string): Promise<Account> {
-    const accounts = await this.financialService.listAccounts();
-    const found = accounts.find(a => a.id === id);
-    if (!found) throw new Error(`Account ${id} not found`);
-    return found;
+    if (this.account) {
+      return this.account.name;
+    }
+    return this.accountsMap.get(accountId)?.name || 'Unknown Account';
   }
 }

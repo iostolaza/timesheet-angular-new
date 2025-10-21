@@ -1,208 +1,223 @@
 
-// src/core/services/financial.service.ts
 
-import { Injectable, inject } from '@angular/core';
+// file: src/app/core/services/financial.service.ts
+import { Injectable } from '@angular/core';
 import { generateClient } from 'aws-amplify/data';
-import type { Schema } from '../../../../amplify/data/resource';
 import { firstValueFrom } from 'rxjs';
-import { AuthService } from './auth.service';
+import { v4 as uuidv4 } from 'uuid';
+import type { Schema } from '../../../../amplify/data/resource';
 import { Account, Transaction } from '../models/financial.model';
-import { format } from 'date-fns';
+import { AuthService } from './auth.service';
 
-@Injectable({
-  providedIn: 'root'
-})
+@Injectable({ providedIn: 'root' })
 export class FinancialService {
-  private client = generateClient<Schema>({ authMode: 'userPool' });
-  private authService = inject(AuthService);
+  private client = generateClient<Schema>();
 
-  private generateChargeCode(name: string, accountNumber: string): string {
-    const prefix = name.slice(0, 2).toUpperCase();
-    const suffix = accountNumber.slice(-3);
-    return `${prefix}${suffix}`;
+  constructor(private authService: AuthService) {}
+
+  /* ---------------------- TYPE MAPPING HELPERS ---------------------- */
+
+  private mapAccountFromSchema(data: any): Account {
+    // Parse charge codes from JSON string
+    let chargeCodes: Account['chargeCodes'] = [];
+    if (data.chargeCodesJson) {
+      try {
+        chargeCodes = JSON.parse(data.chargeCodesJson);
+      } catch (e) {
+        console.error('Failed to parse charge codes:', e);
+        chargeCodes = [];
+      }
+    }
+
+    return {
+      id: data.id,
+      accountNumber: data.accountNumber,
+      name: data.name,
+      details: data.details || undefined,
+      balance: data.balance,
+      startingBalance: data.startingBalance || 0,
+      endingBalance: data.endingBalance,
+      date: data.date,
+      type: data.type,
+      chargeCodes,
+    };
   }
 
-  async listAccounts(): Promise<Account[]> {
-    try {
-      const { data, errors } = await (this.client.models as any)['Account'].list({});
-      if (errors?.length) {
-        throw new Error(`Failed to list accounts: ${errors.map((e: any) => e.message).join(', ')}`);
-      }
-      return (data ?? []) as Account[];
-    } catch (error) {
-      console.error('Error listing accounts:', error);
-      throw error;
+  private mapTransactionFromSchema(data: any): Transaction {
+    return {
+      id: data.id,
+      accountId: data.accountId,
+      fromAccountId: data.fromAccountId || undefined,
+      fromName: data.fromName || undefined,
+      amount: data.amount,
+      debit: data.debit,
+      date: data.date,
+      description: data.description,
+      runningBalance: data.runningBalance,
+    };
+  }
+
+  /* ---------------------- ACCOUNTS ---------------------- */
+
+  async createAccount(account: Omit<Account, 'id' | 'accountNumber'>): Promise<Account> {
+    const id = uuidv4();
+    const accountNumber = this.generateAccountNumber(id);
+
+    const input = {
+      id,
+      accountNumber,
+      name: account.name,
+      details: account.details ?? null,
+      balance: account.balance ?? 0,
+      startingBalance: account.startingBalance ?? account.balance ?? 0,
+      endingBalance: account.endingBalance ?? account.balance ?? 0,
+      date: account.date ?? new Date().toISOString().slice(0, 10),
+      type: account.type,
+      // Serialize charge codes to JSON string
+      chargeCodesJson: JSON.stringify(account.chargeCodes ?? []),
+    };
+
+    const { data, errors } = await this.client.models.Account.create(input);
+    if (errors?.length) {
+      throw new Error(`Failed to create account: ${errors.map((e: any) => e.message).join(', ')}`);
     }
+    return this.mapAccountFromSchema(data);
   }
 
   async getAccount(id: string): Promise<Account> {
-    try {
-      const { data, errors } = await (this.client.models as any)['Account'].get({ id });
-      if (errors?.length) {
-        throw new Error(`Failed to get account: ${errors.map((e: any) => e.message).join(', ')}`);
-      }
-      if (!data) {
-        throw new Error(`Account ${id} not found`);
-      }
-      return data as Account;
-    } catch (error) {
-      console.error('Error getting account:', error);
-      throw error;
+    const { data, errors } = await this.client.models.Account.get({ id });
+    if (errors?.length || !data) {
+      throw new Error('Account not found');
     }
+    return this.mapAccountFromSchema(data);
   }
 
-  async createAccount(account: Omit<Account, 'id' | 'accountNumber'>): Promise<Account> {
-    try {
-      const groups = await firstValueFrom(this.authService.getUserGroups());
-      if (!groups.includes('Admin')) {
-        throw new Error('Admin access required');
-      }
-      const input = {
-        name: account.name,
-        details: account.details ?? null,
-        balance: account.startingBalance ?? 0,
-        startingBalance: account.startingBalance ?? 0,
-        date: account.date,
-        type: account.type,
-        rate: account.rate,
-        chargeCodes: [],
-      };
-      const { data, errors } = await (this.client.models as any)['Account'].create(input);
-      if (errors?.length) {
-        throw new Error(`Failed to create account: ${errors.map((e: any) => e.message).join(', ')}`);
-      }
-      if (!data || !data.id) {
-        console.error('No data or ID returned from createAccount:', { input });
-        throw new Error('Account creation failed: No ID returned');
-      }
-      const accountNumber = data.id.replace(/-/g, '').slice(-16);
-      const defaultChargeCode = this.generateChargeCode(account.name, accountNumber);
-      const updatedAccount = {
-        id: data.id,
-        accountNumber,
-        chargeCodes: [defaultChargeCode],
-      };
-      const { data: updatedData, errors: updateErrors } = await (this.client.models as any)['Account'].update(updatedAccount);
-      if (updateErrors?.length) {
-        throw new Error(`Failed to update account with accountNumber: ${updateErrors.map((e: any) => e.message).join(', ')}`);
-      }
-      if (!updatedData) {
-        throw new Error(`Account ${data.id} not found after update`);
-      }
-      const createdAccount = {
-        ...data,
-        ...updatedData,
-        chargeCodes: [defaultChargeCode],
-      } as Account;
-      for (const cc of createdAccount.chargeCodes) {
-        await this.authService.createGroup(`chargecode-${cc}`);
-      }
-      return createdAccount;
-    } catch (error) {
-      console.error('Error creating account:', error);
-      throw error;
+  async listAccounts(): Promise<Account[]> {
+    const { data, errors } = await this.client.models.Account.list({ limit: 100 });
+    if (errors?.length) {
+      throw new Error(`Failed to list accounts: ${errors.map((e: any) => e.message).join(', ')}`);
     }
+    return (data ?? []).map((d: any) => this.mapAccountFromSchema(d));
   }
 
   async updateAccount(id: string, updates: Partial<Account>): Promise<Account> {
-    try {
-      const groups = await firstValueFrom(this.authService.getUserGroups());
-      if (!groups.includes('Admin')) {
-        throw new Error('Admin access required');
-      }
-      const input = {
-        id,
-        accountNumber: updates.accountNumber ?? undefined,
-        name: updates.name ?? undefined,
-        details: updates.details ?? undefined,
-        balance: updates.balance ?? undefined,
-        startingBalance: updates.startingBalance ?? undefined,
-        endingBalance: updates.endingBalance ?? undefined,
-        date: updates.date ?? undefined,
-        type: updates.type ?? undefined,
-        rate: updates.rate ?? undefined,
-        chargeCodes: updates.chargeCodes ?? undefined,
-      };
-      const { data, errors } = await (this.client.models as any)['Account'].update({ id, data: input });
-      if (errors?.length) {
-        throw new Error(`Failed to update account: ${errors.map((e: any) => e.message).join(', ')}`);
-      }
-      if (!data) {
-        throw new Error(`Account ${id} not found`);
-      }
-      for (const cc of updates.chargeCodes ?? []) {
-        await this.authService.createGroup(`chargecode-${cc}`);
-      }
-      return data as Account;
-    } catch (error) {
-      console.error('Error updating account:', error);
-      throw error;
+    const input: any = { id };
+    
+    // Copy simple fields
+    if (updates.name !== undefined) input.name = updates.name;
+    if (updates.details !== undefined) input.details = updates.details;
+    if (updates.balance !== undefined) input.balance = updates.balance;
+    if (updates.startingBalance !== undefined) input.startingBalance = updates.startingBalance;
+    if (updates.endingBalance !== undefined) input.endingBalance = updates.endingBalance;
+    if (updates.date !== undefined) input.date = updates.date;
+    if (updates.type !== undefined) input.type = updates.type;
+    
+    // Serialize charge codes if provided
+    if (updates.chargeCodes !== undefined) {
+      input.chargeCodesJson = JSON.stringify(updates.chargeCodes);
     }
+
+    const { data, errors } = await this.client.models.Account.update(input);
+    if (errors?.length || !data) {
+      throw new Error(`Failed to update account: ${errors.map((e: any) => e.message).join(', ')}`);
+    }
+    return this.mapAccountFromSchema(data);
   }
 
   async deleteAccount(id: string): Promise<void> {
-    try {
-      const groups = await firstValueFrom(this.authService.getUserGroups());
-      if (!groups.includes('Admin')) {
-        throw new Error('Admin access required');
-      }
-      const { errors } = await (this.client.models as any)['Account'].delete({ id });
-      if (errors?.length) {
-        throw new Error(`Failed to delete account: ${errors.map((e: any) => e.message).join(', ')}`);
-      }
-    } catch (error) {
-      console.error('Error deleting account:', error);
-      throw error;
+    const { errors } = await this.client.models.Account.delete({ id });
+    if (errors?.length) {
+      throw new Error(`Failed to delete account: ${errors.map((e: any) => e.message).join(', ')}`);
     }
   }
 
+  /* ---------------------- TRANSACTIONS ---------------------- */
+
   async createTransaction(tx: Omit<Transaction, 'id' | 'runningBalance' | 'date'>): Promise<Transaction> {
-    try {
-      const groups = await firstValueFrom(this.authService.getUserGroups());
-      if (!groups.includes('Admin')) {
-        throw new Error('Admin access required');
-      }
-      const account = await this.getAccount(tx.accountId);
-      const newBalance = tx.debit ? account.balance - tx.amount : account.balance + tx.amount;
-      const fullTx: Omit<Transaction, 'id'> = {
-        accountId: tx.accountId,
-        fromAccountId: tx.fromAccountId ?? undefined,
-        fromName: tx.fromName ?? undefined,
-        amount: tx.amount,
-        debit: tx.debit,
-        date: format(new Date(), 'yyyy-MM-dd'),
-        description: tx.description,
-        runningBalance: newBalance,
-      };
-      const { data, errors } = await (this.client.models as any)['Transaction'].create({ data: fullTx });
-      if (errors?.length) {
-        throw new Error(`Failed to create transaction: ${errors.map((e: any) => e.message).join(', ')}`);
-      }
-      if (!data) {
-        throw new Error('Transaction creation failed: No data returned');
-      }
-      await this.updateAccount(account.id, { balance: newBalance });
-      return data as Transaction;
-    } catch (error) {
-      console.error('Error creating transaction:', error);
-      throw error;
+    const account = await this.getAccount(tx.accountId);
+    const runningBalance = tx.debit ? account.balance - tx.amount : account.balance + tx.amount;
+
+    const input = {
+      id: uuidv4(),
+      accountId: tx.accountId,
+      fromAccountId: tx.fromAccountId ?? null,
+      fromName: tx.fromName ?? null,
+      amount: tx.amount,
+      debit: tx.debit,
+      date: new Date().toISOString(),
+      description: tx.description,
+      runningBalance,
+    };
+
+    const { data, errors } = await this.client.models.Transaction.create(input);
+    if (errors?.length || !data) {
+      throw new Error(`Failed to create transaction: ${errors.map((e: any) => e.message).join(', ')}`);
     }
+
+    // Update account balance
+    await this.updateAccount(account.id, { balance: runningBalance, endingBalance: runningBalance });
+    return this.mapTransactionFromSchema(data);
   }
 
   async listTransactions(filter?: { accountId?: string }): Promise<Transaction[]> {
-    try {
-      const query: any = {};
-      if (filter?.accountId) {
-        query.filter = { accountId: { eq: filter.accountId } };
-      }
-      const { data, errors } = await (this.client.models as any)['Transaction'].list(query);
-      if (errors?.length) {
-        throw new Error(`Failed to list transactions: ${errors.map((e: any) => e.message).join(', ')}`);
-      }
-      return (data ?? []) as Transaction[];
-    } catch (error) {
-      console.error('Error listing transactions:', error);
-      throw error;
+    const gqlFilter = filter?.accountId ? { accountId: { eq: filter.accountId } } : undefined;
+    const { data, errors } = await this.client.models.Transaction.list({ 
+      filter: gqlFilter, 
+      limit: 200 
+    });
+    if (errors?.length) {
+      throw new Error(`Failed to list transactions: ${errors.map((e: any) => e.message).join(', ')}`);
     }
+    return (data ?? []).map((d: any) => this.mapTransactionFromSchema(d));
+  }
+
+  /* ---------------------- CHARGE CODES ---------------------- */
+
+  private generateChargeCode(name: string, accountNumber: string): string {
+    const short = (name || '').replace(/[^A-Z0-9]/gi, '').slice(0, 2).toUpperCase() || 'CC';
+    const mid = accountNumber.slice(-3);
+    const rand = Math.floor(10 + Math.random() * 90);
+    return `${short}-${mid}-${rand}`;
+  }
+
+  async createChargeCode(account: Account): Promise<Account['chargeCodes'][number]> {
+    const name = this.generateChargeCode(account.name, account.accountNumber);
+    const currentUser = await firstValueFrom(this.authService.getCurrentUser());
+    const createdBy = currentUser?.id ?? 'system';
+
+    const chargeCode = {
+      name,
+      cognitoGroup: `chargecode-${name}`,
+      createdBy,
+      date: new Date().toISOString(),
+    };
+
+    const updatedChargeCodes = [...(account.chargeCodes ?? []), chargeCode];
+    await this.updateAccount(account.id, { chargeCodes: updatedChargeCodes });
+    await this.authService.createGroup(chargeCode.cognitoGroup!);
+
+    return chargeCode;
+  }
+
+  async listChargeCodes(accountId: string): Promise<Account['chargeCodes']> {
+    const account = await this.getAccount(accountId);
+    return account.chargeCodes ?? [];
+  }
+
+  /* ---------------------- FUNDS HELPERS ---------------------- */
+
+  async addFunds(accountId: string, amount: number, description: string = 'Add funds'): Promise<Transaction> {
+    return this.createTransaction({ accountId, amount, debit: false, description });
+  }
+
+  async subtractFunds(accountId: string, amount: number, description: string = 'Subtract funds'): Promise<Transaction> {
+    return this.createTransaction({ accountId, amount, debit: true, description });
+  }
+
+  /* ---------------------- UTILITIES ---------------------- */
+
+  private generateAccountNumber(id: string): string {
+    const digits = Array.from(id).map(c => c.charCodeAt(0)).join('');
+    return (digits + '0000000000000000').slice(0, 16);
   }
 }

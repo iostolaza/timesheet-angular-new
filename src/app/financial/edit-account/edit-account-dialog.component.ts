@@ -1,22 +1,16 @@
 
-// src/app/financial/edit-account/edit-account-dialog.component.ts
-
-import { Component, Inject, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
+// file: src/app/financial/edit-account/edit-account-dialog.component.ts
+import { Component, Inject, ChangeDetectorRef, inject } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
-import { MatListModule } from '@angular/material/list';
 import { MatIconModule } from '@angular/material/icon';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { CommonModule } from '@angular/common';
-import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule, FormBuilder, Validators, FormGroup } from '@angular/forms';
 import { FinancialService } from '../../core/services/financial.service';
 import { AuthService } from '../../core/services/auth.service';
-import { Account, ChargeCode, Transaction } from '../../core/models/financial.model';
+import { Account, Transaction } from '../../core/models/financial.model';
 import { ChargeCodeDialogComponent } from '../charge-code/charge-code-dialog.component';
-import { ChargeCodeUsersDialogComponent } from '../charge-code/charge-code-users-dialog.component';
 import { firstValueFrom } from 'rxjs';
 import { format } from 'date-fns';
 
@@ -29,23 +23,18 @@ import { format } from 'date-fns';
     ReactiveFormsModule,
     MatDialogModule,
     MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
-    MatListModule,
     MatIconModule,
-    MatSnackBarModule,
   ],
   templateUrl: './edit-account-dialog.component.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class EditAccountDialogComponent {
   form: FormGroup;
   accountTypes = ['Asset', 'Liability', 'Equity', 'Revenue', 'Expense'];
-  chargeCodes: (ChargeCode & { id?: string })[] = [];
+  chargeCodes: Array<{ name: string; linkedAccount: string; id?: string }> = [];
   errorMessage: string | null = null;
 
   private dialog = inject(MatDialog);
+  private snackBar = inject(MatSnackBar);
 
   constructor(
     public dialogRef: MatDialogRef<EditAccountDialogComponent>,
@@ -53,65 +42,91 @@ export class EditAccountDialogComponent {
     private fb: FormBuilder,
     private financialService: FinancialService,
     private authService: AuthService,
-    private snackBar: MatSnackBar,
     private cdr: ChangeDetectorRef
   ) {
+    // Initialize form with account data
     this.form = this.fb.group({
       id: [{ value: data.account.id, disabled: true }],
       accountNumber: [{ value: data.account.accountNumber, disabled: true }],
       name: [data.account.name, [Validators.required, Validators.minLength(3)]],
       details: [data.account.details || ''],
-      balance: [{ value: data.account.balance, disabled: true }, [Validators.required, Validators.min(0)]],
+      balance: [{ value: data.account.balance, disabled: true }],
       addFunds: [0, [Validators.min(0)]],
       type: [data.account.type, Validators.required],
-      rate: [data.account.rate, [Validators.required, Validators.min(0)]],
     });
-    this.chargeCodes = data.account.chargeCodes.map((cc, index) => ({
-      name: cc,
+
+    // Map charge codes to display format
+    this.chargeCodes = (data.account.chargeCodes || []).map((cc, index) => ({
+      name: cc.name,
       linkedAccount: data.account.accountNumber,
       id: `${data.account.accountNumber}-${index}`,
     }));
   }
 
-  async openCreateChargeCodeDialog() {
-    const groups = await firstValueFrom(this.authService.getUserGroups());
-    if (!groups.includes('Admin')) {
-      this.errorMessage = 'Admin access required to create charge codes';
-      this.cdr.markForCheck();
-      return;
-    }
-    const dialogRef = this.dialog.open(ChargeCodeDialogComponent, {
-      width: '500px',
-      data: { account: { id: this.data.account.id, accountNumber: this.data.account.accountNumber } },
-    });
+  private generateChargeCode(accountNumber: string): string {
+    const randomNum = Math.floor(1000 + Math.random() * 9000);
+    return `CC${accountNumber.slice(-4)}-${randomNum}`;
+  }
 
-    const result = await firstValueFrom(dialogRef.afterClosed());
-    if (result && Array.isArray(result)) {
-      const newChargeCode = result[0] as ChargeCode & { id?: string };
-      this.chargeCodes.push({ ...newChargeCode, id: `${this.data.account.accountNumber}-${this.chargeCodes.length}` });
-      await this.authService.createGroup(`chargecode-${newChargeCode.name}`);
+  async addChargeCode() {
+    try {
+      const groups = await firstValueFrom(this.authService.getUserGroups());
+      if (!groups.includes('Admin')) {
+        this.errorMessage = 'Admin access required to create charge codes';
+        this.cdr.markForCheck();
+        return;
+      }
+
+      const chargeCodeName = this.generateChargeCode(this.data.account.accountNumber);
+      const newChargeCode = {
+        name: chargeCodeName,
+        cognitoGroup: `chargecode-${chargeCodeName}`,
+        createdBy: (await firstValueFrom(this.authService.getCurrentUser()))?.id || 'system',
+        date: new Date().toISOString(),
+      };
+
+      // Add to local array
+      this.chargeCodes.push({
+        name: newChargeCode.name,
+        linkedAccount: this.data.account.accountNumber,
+        id: `${this.data.account.accountNumber}-${this.chargeCodes.length}`,
+      });
+
+      // Create Cognito group
+      await this.authService.createGroup(newChargeCode.cognitoGroup!);
       this.cdr.markForCheck();
-      this.openChargeCodeUsersDialog(newChargeCode.name);
+
+      // Open dialog to assign users
+      this.openChargeCodeDialog(newChargeCode.name);
+    } catch (error: any) {
+      this.errorMessage = `Failed to add charge code: ${error.message || 'Unknown error'}`;
+      this.cdr.markForCheck();
     }
   }
 
-  async openChargeCodeUsersDialog(chargeCodeName: string) {
-    const groups = await firstValueFrom(this.authService.getUserGroups());
-    if (!groups.includes('Admin')) {
-      this.errorMessage = 'Admin access required to manage charge code users';
-      this.cdr.markForCheck();
-      return;
-    }
-    const dialogRef = this.dialog.open(ChargeCodeUsersDialogComponent, {
-      width: '500px',
-      data: { chargeCodeName },
-    });
+  async openChargeCodeDialog(chargeCodeName: string) {
+    try {
+      const groups = await firstValueFrom(this.authService.getUserGroups());
+      if (!groups.includes('Admin')) {
+        this.errorMessage = 'Admin access required to manage charge code users';
+        this.cdr.markForCheck();
+        return;
+      }
 
-    await firstValueFrom(dialogRef.afterClosed());
-    this.snackBar.open(`Users assigned to charge code ${chargeCodeName}`, 'OK', { duration: 2000 });
+      const dialogRef = this.dialog.open(ChargeCodeDialogComponent, {
+        width: '600px',
+        data: { chargeCodeName, account: this.data.account },
+      });
+
+      await firstValueFrom(dialogRef.afterClosed());
+      this.snackBar.open(`Users assigned to charge code ${chargeCodeName}`, 'OK', { duration: 2000 });
+    } catch (error: any) {
+      this.errorMessage = `Failed to open charge code dialog: ${error.message || 'Unknown error'}`;
+      this.cdr.markForCheck();
+    }
   }
 
-  removeChargeCode(code: ChargeCode & { id?: string }) {
+  removeChargeCode(code: { name: string; linkedAccount: string; id?: string }) {
     this.chargeCodes = this.chargeCodes.filter(c => c.id !== code.id);
     this.cdr.markForCheck();
   }
@@ -129,10 +144,12 @@ export class EditAccountDialogComponent {
       if (!groups.includes('Admin')) {
         throw new Error('Admin access required');
       }
-      const formValue = this.form.value;
+
+      const formValue = this.form.getRawValue(); // Get all values including disabled
       const addFunds = formValue.addFunds || 0;
       const newBalance = this.data.account.balance + addFunds;
 
+      // Create transaction if funds added
       if (addFunds > 0) {
         const transaction: Omit<Transaction, 'id' | 'runningBalance' | 'date'> = {
           accountId: this.data.account.id,
@@ -143,21 +160,23 @@ export class EditAccountDialogComponent {
         await this.financialService.createTransaction(transaction);
       }
 
+      // Update account with new charge codes
+      const updatedChargeCodes = this.chargeCodes.map(cc => ({
+        name: cc.name,
+        cognitoGroup: `chargecode-${cc.name}`,
+        createdBy: this.data.account.chargeCodes?.find(c => c.name === cc.name)?.createdBy || 'system',
+        date: this.data.account.chargeCodes?.find(c => c.name === cc.name)?.date || new Date().toISOString(),
+      }));
+
       const updatedAccount: Partial<Account> = {
-        id: this.data.account.id,
-        accountNumber: this.data.account.accountNumber,
         name: formValue.name,
         details: formValue.details || undefined,
-        balance: newBalance,
-        startingBalance: this.data.account.startingBalance,
-        endingBalance: newBalance,
-        date: format(new Date(), 'yyyy-MM-dd'),
         type: formValue.type,
-        rate: formValue.rate,
-        chargeCodes: this.chargeCodes.map(c => c.name),
+        chargeCodes: updatedChargeCodes,
       };
 
       const result = await this.financialService.updateAccount(this.data.account.id, updatedAccount);
+      this.snackBar.open('Account updated successfully!', 'OK', { duration: 2000 });
       this.dialogRef.close(result);
     } catch (error: any) {
       this.errorMessage = `Failed to update account: ${error.message || 'Unknown error'}`;

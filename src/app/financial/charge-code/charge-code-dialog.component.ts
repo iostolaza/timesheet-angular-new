@@ -3,18 +3,18 @@
 
 import { Component, Inject, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
-import { MatListModule } from '@angular/material/list';
 import { MatButtonModule } from '@angular/material/button';
-import { MatIconModule } from '@angular/material/icon';
-import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatListModule } from '@angular/material/list';
 import { MatInputModule } from '@angular/material/input';
 import { CommonModule } from '@angular/common';
-import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { FinancialService } from '../../core/services/financial.service';
+import { FormsModule, ReactiveFormsModule, FormControl } from '@angular/forms';
 import { AuthService } from '../../core/services/auth.service';
-import { Account, ChargeCode } from '../../core/models/financial.model';
-import { firstValueFrom } from 'rxjs';
+import { User } from '../../core/models/financial.model';
+
+interface DialogData {
+  chargeCodeName: string;
+  account: { id: string; accountNumber: string };
+}
 
 @Component({
   selector: 'app-charge-code-dialog',
@@ -24,95 +24,59 @@ import { firstValueFrom } from 'rxjs';
     FormsModule,
     ReactiveFormsModule,
     MatDialogModule,
-    MatListModule,
     MatButtonModule,
-    MatCheckboxModule,
-    MatIconModule,
-    MatFormFieldModule,
+    MatListModule,
     MatInputModule,
   ],
   templateUrl: './charge-code-dialog.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ChargeCodeDialogComponent {
-  form: FormGroup;
-  mode: 'create' | 'select' = 'select';
-  availableCodes: (ChargeCode & { id?: string; active?: boolean })[] = [];
+  users: User[] = [];
+  filteredUsers: User[] = [];
+  selectedUsers = new FormControl<string[]>([]);
+  searchQuery: string = '';
   errorMessage: string | null = null;
 
   constructor(
     public dialogRef: MatDialogRef<ChargeCodeDialogComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: { chargeCodes?: (ChargeCode & { id?: string })[]; account?: { id: string; accountNumber: string } },
-    private fb: FormBuilder,
-    private financialService: FinancialService,
+    @Inject(MAT_DIALOG_DATA) public data: DialogData,
     private authService: AuthService,
     private cdr: ChangeDetectorRef
   ) {
-    this.mode = this.data.chargeCodes ? 'select' : 'create';
-    this.form = this.fb.group({
-      name: ['', [Validators.required, Validators.minLength(3)]],
-    });
-
-    if (this.mode === 'select') {
-      this.loadAvailableCodes();
-    }
+    this.loadUsers();
   }
 
-  private generateChargeCode(name: string, accountNumber: string): string {
-    const prefix = name.slice(0, 2).toUpperCase();
-    const suffix = accountNumber.slice(-3);
-    return `${prefix}${suffix}`;
-  }
-
-  async loadAvailableCodes(): Promise<void> {
+  async loadUsers() {
     try {
-      const userGroups: string[] = await firstValueFrom(this.authService.getUserGroups());
-      const allAccounts: Account[] = await this.financialService.listAccounts();
-      this.availableCodes = allAccounts
-        .flatMap((account: Account) =>
-          account.chargeCodes.map((cc: string) => ({
-            name: cc,
-            linkedAccount: account.accountNumber,
-            id: `${account.accountNumber}-${cc}`,
-            active: false,
-          }))
-        )
-        .filter((cc: ChargeCode & { id?: string }) =>
-          userGroups.some((group: string) => group.startsWith('chargecode-') && cc.name.includes(group.split('-')[1]))
-        );
+      this.users = await this.authService.listUsers();
+      this.filteredUsers = this.users;
       this.cdr.markForCheck();
-    } catch (error) {
-      this.errorMessage = 'Failed to load available charge codes';
+    } catch (error: any) {
+      this.errorMessage = `Failed to load users: ${error.message || 'Unknown error'}`;
       this.cdr.markForCheck();
     }
   }
 
-  removeCode(code: ChargeCode & { id?: string }): void {
-    if (this.data.chargeCodes) {
-      this.data.chargeCodes = this.data.chargeCodes.filter(c => c.id !== code.id);
-      this.cdr.markForCheck();
-    }
+  searchUsers() {
+    this.filteredUsers = this.users.filter(user =>
+      user.email.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+      user.name.toLowerCase().includes(this.searchQuery.toLowerCase())
+    );
+    this.cdr.markForCheck();
   }
 
-  async save(): Promise<void> {
-    if (this.mode === 'create') {
-      if (this.form.invalid) {
-        this.form.markAllAsTouched();
-        this.errorMessage = 'Please fill out all required fields';
-        this.cdr.markForCheck();
-        return;
+  async save() {
+    try {
+      const selectedEmails = this.selectedUsers.value || [];
+      const groupName = `chargecode-${this.data.chargeCodeName}`;
+      for (const email of selectedEmails) {
+        await this.authService.addUserToGroup(email, groupName);
       }
-      const formValue = this.form.value;
-      const chargeCode: ChargeCode = {
-        name: this.generateChargeCode(formValue.name, this.data.account?.accountNumber || 'UNKNOWN'),
-        linkedAccount: this.data.account?.accountNumber || 'UNKNOWN',
-      };
-      this.dialogRef.close([chargeCode]);
-    } else {
-      const added = this.availableCodes
-        .filter(c => c.active)
-        .map(c => ({ name: c.name, linkedAccount: c.linkedAccount, id: c.id }));
-      this.dialogRef.close([...(this.data.chargeCodes || []), ...added]);
+      this.dialogRef.close();
+    } catch (error: any) {
+      this.errorMessage = `Failed to add users to group: ${error.message || 'Unknown error'}`;
+      this.cdr.markForCheck();
     }
   }
 }

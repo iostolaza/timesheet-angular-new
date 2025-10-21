@@ -6,17 +6,16 @@ import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { CommonModule, CurrencyPipe } from '@angular/common';
 import { FinancialService } from '../../core/services/financial.service';
-// import { ChargeCodeDialogComponent } from '../charge-code/charge-code-dialog.component';
-import { CreateAccountDialogComponent } from '../../financial/create-account/create-account-dialog.component';
+import { EditAccountDialogComponent } from '../edit-account/edit-account-dialog.component';
 import { Account } from '../../core/models/financial.model';
 
 @Component({
   selector: 'app-account-list',
   standalone: true,
-  imports: [CommonModule, MatTableModule, MatButtonModule, MatIconModule, MatDialogModule, CurrencyPipe],
+  imports: [CommonModule, MatTableModule, MatButtonModule, MatIconModule, MatDialogModule, CurrencyPipe, RouterLink],
   templateUrl: './account-list.component.html',
 })
 export class AccountListComponent implements OnInit {
@@ -31,12 +30,14 @@ export class AccountListComponent implements OnInit {
   }
 
   canPost(account: Account): boolean {
-    return true; // Stub
+    return true; 
   }
 
-  openCreateAccountDialog() {
-    const dialogRef = this.dialog.open(CreateAccountDialogComponent, {
-      width: '500px',
+  editAccount(account: Account) {
+    const dialogRef = this.dialog.open(EditAccountDialogComponent, {
+      width: '600px',
+      maxHeight: '80vh',
+      data: { account },
     });
 
     dialogRef.afterClosed().subscribe(async (result: Account | undefined) => {
@@ -46,10 +47,6 @@ export class AccountListComponent implements OnInit {
     });
   }
 
-  editAccount(id: string) {
-    this.router.navigate(['/accounts/edit', id]);
-  }
-
   openLedger(id?: string): void {
     this.router.navigate(['/accounts/ledger', id]);
   }
@@ -57,11 +54,4 @@ export class AccountListComponent implements OnInit {
   openChargeModal(account: Account): void {
     console.log('Charge for', account);
   }
-
-  // manageChargeCodes(account: Account) {
-  //   this.dialog.open(ChargeCodeDialogComponent, {
-  //     width: '500px',
-  //     data: { account },
-  //   });
-  // }
 }
