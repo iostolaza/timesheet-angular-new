@@ -59,32 +59,33 @@ export class FinancialService {
     };
   }
 
-  async createAccount(account: Omit<Account, 'id' | 'accountNumber'>): Promise<Account> {
-    const id = uuidv4();
-    const accountNumber = this.generateAccountNumber(id);
+ // src/app/core/services/financial.service.ts - Fix line 75
+async createAccount(account: Omit<Account, 'id' | 'accountNumber'>): Promise<Account> {
+  const id = uuidv4();
+  const accountNumber = this.generateAccountNumber(id);
 
-    const input: AccountModel = {
-      id,
-      accountNumber,
-      name: account.name,
-      details: account.details ?? null,
-      balance: account.balance ?? 0,
-      startingBalance: account.startingBalance ?? account.balance ?? 0,
-      endingBalance: account.endingBalance ?? account.balance ?? 0,
-      date: account.date ?? new Date().toISOString().split('T')[0],
-      type: account.type,
-      chargeCodesJson: JSON.stringify(account.chargeCodes ?? []),
-    };
+  const input: AccountModel = {
+    id,
+    accountNumber,
+    name: account.name,
+    details: account.details ?? null,
+    balance: account.balance ?? 0,
+    startingBalance: account.startingBalance ?? account.balance ?? 0,
+    endingBalance: account.endingBalance ?? account.balance ?? 0,
+    date: account.date ?? new Date().toISOString().split('T')[0],
+    type: account.type ?? null, // FIXED: Added null coalescing
+    chargeCodesJson: JSON.stringify(account.chargeCodes ?? []),
+  };
 
-    const { data, errors } = await this.client.models.Account.create(input, { authMode: 'userPool' });
-    if (errors?.length) {
-      throw new Error(`Failed to create account: ${errors.map(e => e.message).join(', ')}`);
-    }
-    if (!data) {
-      throw new Error('No data returned from account creation');
-    }
-    return this.mapAccountFromSchema(data as AccountModel);
+  const { data, errors } = await this.client.models.Account.create(input, { authMode: 'userPool' });
+  if (errors?.length) {
+    throw new Error(`Failed to create account: ${errors.map((e: any) => e.message).join(', ')}`); // FIXED: Added type
   }
+  if (!data) {
+    throw new Error('No data returned from account creation');
+  }
+  return this.mapAccountFromSchema(data as AccountModel);
+}
 
   async getAccount(id: string): Promise<Account> {
     const { data, errors } = await this.client.models.Account.get({ id }, { authMode: 'userPool' });
