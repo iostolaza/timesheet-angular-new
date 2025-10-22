@@ -1,6 +1,4 @@
-
-
-// file: src/app/core/services/financial.service.ts
+// src/app/core/services/financial.service.ts
 import { Injectable } from '@angular/core';
 import { generateClient } from 'aws-amplify/data';
 import { firstValueFrom } from 'rxjs';
@@ -75,7 +73,6 @@ export class FinancialService {
       chargeCodesJson: JSON.stringify(account.chargeCodes ?? []),
     };
 
-    console.log('Creating account with input:', input);
     const { data, errors } = await this.client.models.Account.create(input, { authMode: 'userPool' });
     if (errors?.length) {
       throw new Error(`Failed to create account: ${errors.map((e: any) => e.message).join(', ')}`);
@@ -137,7 +134,6 @@ export class FinancialService {
       chargeCodesJson: updates.chargeCodes ? JSON.stringify(updates.chargeCodes) : JSON.stringify(currentAccount.chargeCodes ?? []),
     };
 
-    console.log('Updating account with input:', input);
     const { data, errors } = await this.client.models.Account.update(input, { authMode: 'userPool' });
     if (errors?.length) {
       throw new Error(`Failed to update account: ${errors.map(e => e.message).join(', ')}`);
@@ -217,22 +213,21 @@ export class FinancialService {
     };
 
     const updatedChargeCodes = [...(account.chargeCodes ?? []), chargeCode];
-    await this.updateAccount(account.id, {
-      accountNumber: account.accountNumber,
-      balance: account.balance,
-      endingBalance: account.endingBalance,
-      chargeCodes: updatedChargeCodes
-    });
 
     try {
       await this.cognitoGroupService.createGroup(chargeCode.cognitoGroup);
+      await this.updateAccount(account.id, {
+        accountNumber: account.accountNumber,
+        balance: account.balance,
+        endingBalance: account.endingBalance,
+        chargeCodes: updatedChargeCodes,
+      });
       console.log('Charge code and group created:', chargeCode);
+      return chargeCode;
     } catch (error: any) {
-      console.error('Failed to create Cognito group for charge code:', error);
-      throw new Error(`Failed to create charge code group: ${error.message || error}`);
+      console.error('Failed to create charge code or group:', error);
+      throw new Error(`Failed to create charge code: ${error.message || error}`);
     }
-
-    return chargeCode;
   }
 
   async listChargeCodes(accountId: string): Promise<Account['chargeCodes']> {

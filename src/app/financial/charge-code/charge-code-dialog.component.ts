@@ -1,11 +1,10 @@
-
-// src/app/financial/charge-codes-dialog.component.ts
 // file: src/app/financial/charge-code/charge-code-dialog.component.ts
 import { Component, Inject, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatListModule } from '@angular/material/list';
 import { MatInputModule } from '@angular/material/input';
+import { MatIconModule } from '@angular/material/icon';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormControl } from '@angular/forms';
 import { CognitoGroupService } from '../../core/services/cognito-group.service';
@@ -15,6 +14,8 @@ import { User } from '../../core/models/financial.model';
 interface DialogData {
   chargeCodeName: string;
   account: { id: string; accountNumber: string };
+  createdBy: string;
+  date: string;
 }
 
 @Component({
@@ -28,16 +29,17 @@ interface DialogData {
     MatButtonModule,
     MatListModule,
     MatInputModule,
+    MatIconModule,
   ],
   templateUrl: './charge-code-dialog.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ChargeCodeDialogComponent {
-  users: User[] = []; // All users from AuthService.listUsers
-  filteredUsers: User[] = []; // Filtered users for adding to group
-  groupMembers: { Username: string }[] = []; // Current group members
-  selectedUsers = new FormControl<string[]>([]); // Selected users to add
-  searchQuery: string = ''; // Search input
+  users: User[] = [];
+  filteredUsers: User[] = [];
+  groupMembers: { Username: string }[] = [];
+  selectedUsers = new FormControl<string[]>([]);
+  searchQuery: string = '';
   errorMessage: string | null = null;
   loading = false;
 
@@ -52,7 +54,6 @@ export class ChargeCodeDialogComponent {
     this.loadGroupMembers();
   }
 
-  // Load all users from Amplify Data User model
   async loadUsers() {
     this.loading = true;
     try {
@@ -68,7 +69,6 @@ export class ChargeCodeDialogComponent {
     }
   }
 
-  // Load current group members from Cognito
   async loadGroupMembers() {
     this.loading = true;
     try {
@@ -83,7 +83,6 @@ export class ChargeCodeDialogComponent {
     }
   }
 
-  // Search all users (not group members) for adding to the group
   searchUsers() {
     this.filteredUsers = this.users.filter(user =>
       user.email.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
@@ -92,7 +91,6 @@ export class ChargeCodeDialogComponent {
     this.cdr.markForCheck();
   }
 
-  // Add selected users to the group
   async save() {
     this.loading = true;
     this.errorMessage = null;
@@ -115,7 +113,6 @@ export class ChargeCodeDialogComponent {
     }
   }
 
-  // Remove a user from the group
   async removeUser(email: string) {
     this.loading = true;
     this.errorMessage = null;

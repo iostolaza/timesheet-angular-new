@@ -1,178 +1,10 @@
-
-
 <!-- file: src/app/financial/edit-account/edit-account-dialog.component.html -->
 <div class="bg-white rounded-2xl shadow-xl p-6 max-h-[80vh] overflow-y-auto">
-  <!-- Header Section -->
-  <h3 class="text-2xl font-bold text-gray-800 mb-4">{{ data.account.name }}</h3>
-  <h1 class="text-2xl font-bold text-gray-800 mb-4">Edit Account</h1>
-  
-  @if (errorMessage) {
-    <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">
-      {{ errorMessage }}
-    </div>
-  }
-
-  <!-- Form Section -->
-  <form [formGroup]="form" class="space-y-4">
-    <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
-      <input
-        type="text"
-        formControlName="accountNumber"
-        class="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-100"
-        readonly
-        aria-readonly="true"
-      />
-    </div>
-    
-    <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-      <input
-        type="text"
-        formControlName="name"
-        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-        placeholder="Account name"
-      />
-      @if (form.get('name')?.hasError('required') && form.get('name')?.touched) {
-        <div class="text-red-500 text-sm mt-1">Name is required</div>
-      }
-      @if (form.get('name')?.hasError('minlength') && form.get('name')?.touched) {
-        <div class="text-red-500 text-sm mt-1">Name must be at least 3 characters</div>
-      }
-    </div>
-    
-    <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-      <textarea
-        formControlName="details"
-        rows="2"
-        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-        placeholder="Optional description"
-      ></textarea>
-    </div>
-    
-    <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Current Balance ($)</label>
-      <input
-        type="number"
-        formControlName="balance"
-        class="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-100"
-        readonly
-        aria-readonly="true"
-      />
-    </div>
-    
-    <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Add Funds ($)</label>
-      <input
-        type="number"
-        formControlName="addFunds"
-        step="0.01"
-        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-        placeholder="0.00"
-      />
-      @if (form.get('addFunds')?.hasError('min') && form.get('addFunds')?.touched) {
-        <div class="text-red-500 text-sm mt-1">Amount cannot be negative</div>
-      }
-      <p class="text-gray-500 text-xs mt-1">Enter amount to add to current balance</p>
-    </div>
-    
-    <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Account Type *</label>
-      <select formControlName="type" class="w-full border border-gray-300 rounded-md px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
-        <option value="">Select type</option>
-        @for (type of accountTypes; track type) {
-          <option [value]="type">{{ type }}</option>
-        }
-      </select>
-      @if (form.get('type')?.hasError('required') && form.get('type')?.touched) {
-        <div class="text-red-500 text-sm mt-1">Account type is required</div>
-      }
-    </div>
-  </form>
-
-  <!-- Charge Codes Section -->
-  <div class="mt-6">
-    <h3 class="text-lg font-semibold text-gray-800 mb-2">Charge Codes</h3>
-    <button 
-      class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md mb-4 disabled:opacity-50" 
-      (click)="addChargeCode()"
-      [disabled]="loading"
-    >
-      Add Charge Code
-    </button>
-    
-    @if (chargeCodes.length === 0) {
-      <div class="text-gray-500 text-sm py-4">
-        No charge codes yet. Click "Add Charge Code" to create one.
-      </div>
-    }
-    
-    @if (chargeCodes.length > 0) {
-      <div class="divide-y divide-gray-200">
-        @for (code of chargeCodes; track code.name) {
-          <div class="py-3 flex items-center justify-between">
-            <div class="flex-1">
-              <p class="text-gray-800 font-medium">{{ code.name }}</p>
-              <p class="text-gray-500 text-xs">Group: {{ code.cognitoGroup }}</p>
-              <p class="text-gray-400 text-xs">Created: {{ code.date | date:'short' }}</p>
-            </div>
-            <div class="flex gap-2">
-              <button 
-                class="text-blue-500 hover:text-blue-700 p-2" 
-                (click)="openChargeCodeDialog(code.cognitoGroup)" 
-                aria-label="Manage users for charge code"
-                title="Manage Users"
-              >
-                <mat-icon>group</mat-icon>
-              </button>
-              <button 
-                class="text-red-500 hover:text-red-700 p-2" 
-                (click)="removeChargeCode(code)" 
-                aria-label="Remove charge code"
-                title="Remove Charge Code"
-                [disabled]="loading"
-              >
-                <mat-icon>delete</mat-icon>
-              </button>
-            </div>
-          </div>
-        }
-      </div>
-    }
+  <h2 class="text-2xl font-bold text-gray-800 mb-4">Edit Account: {{ data.account.name }}</h2>
+  <div *ngIf="errorMessage" class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">
+    {{ errorMessage }}
   </div>
-
-  <!-- Buttons Section -->
-  <div class="mt-6 flex justify-end gap-3">
-    <button 
-      class="border border-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-100 disabled:opacity-50" 
-      (click)="dialogRef.close()" 
-      [disabled]="loading"
-      aria-label="Cancel"
-    >
-      Cancel
-    </button>
-    
-    <button
-      class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
-      (click)="save()"
-      [disabled]="form.invalid || loading"
-      aria-label="Save account"
-    >
-      {{ loading ? 'Saving...' : 'Save' }}
-    </button>
-  </div>
-</div>
-
-
-
-<!-- src/app/financial/edit-account/edit-account-dialog.component.html -->
-<!-- 
-<div class="bg-white rounded-2xl shadow-xl p-6 max-h-[80vh] overflow-y-auto">
-
-  <h3 class="text-2xl font-bold text-gray-800 mb-4">{{ data.account.name }}</h3>
-  <h1 class="text-2xl font-bold text-gray-800 mb-4">Edit Account</h1>
-  <div *ngIf="errorMessage" class="text-red-500 text-sm mb-4" role="alert">{{ errorMessage }}</div>
+  <div *ngIf="loading" class="text-gray-600 mb-4">Loading...</div>
 
   <form [formGroup]="form" class="space-y-4">
     <div>
@@ -186,7 +18,7 @@
       />
     </div>
     <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Account Number *</label>
       <input
         type="text"
         formControlName="accountNumber"
@@ -196,13 +28,12 @@
       />
     </div>
     <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Name *</label>
       <input
         type="text"
         formControlName="name"
         class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
         placeholder="Account name"
-        [attr.aria-required]="form.get('name')?.hasError('required')"
       />
       <div *ngIf="form.get('name')?.hasError('required') && form.get('name')?.touched" class="text-red-500 text-sm mt-1">Name is required</div>
       <div *ngIf="form.get('name')?.hasError('minlength') && form.get('name')?.touched" class="text-red-500 text-sm mt-1">Name must be at least 3 characters</div>
@@ -217,7 +48,7 @@
       ></textarea>
     </div>
     <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Current Balance</label>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Current Balance ($)</label>
       <input
         type="number"
         formControlName="balance"
@@ -227,51 +58,89 @@
       />
     </div>
     <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Add Funds</label>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Add Funds ($)</label>
       <input
         type="number"
         formControlName="addFunds"
+        step="0.01"
         class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
         placeholder="0.00"
       />
       <div *ngIf="form.get('addFunds')?.hasError('min') && form.get('addFunds')?.touched" class="text-red-500 text-sm mt-1">Amount cannot be negative</div>
+      <p class="text-gray-500 text-xs mt-1">Enter amount to add to current balance</p>
     </div>
     <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Account Type</label>
-      <select formControlName="type" class="w-full border border-gray-300 rounded-md px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none" [attr.aria-required]="form.get('type')?.hasError('required')">
+      <label class="block text-sm font-medium text-gray-700 mb-1">Account Type *</label>
+      <select formControlName="type" class="w-full border border-gray-300 rounded-md px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
         <option value="">Select type</option>
-        <option *ngFor="let type of accountTypes" [value]="type">{{ type }}</option>
+        <ng-container *ngFor="let type of accountTypes">
+          <option [value]="type">{{ type }}</option>
+        </ng-container>
       </select>
       <div *ngIf="form.get('type')?.hasError('required') && form.get('type')?.touched" class="text-red-500 text-sm mt-1">Account type is required</div>
     </div>
   </form>
 
-
   <div class="mt-6">
     <h3 class="text-lg font-semibold text-gray-800 mb-2">Charge Codes</h3>
-    <button mat-raised-button class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md mb-4" (click)="addChargeCode()">Add Charge Code</button>
-    <div class="divide-y divide-gray-200">
-      <div *ngFor="let code of chargeCodes" class="py-2 flex items-center">
-        <span class="flex-1 text-gray-700">{{ code.name }} ({{ code.linkedAccount }})</span>
-        <button mat-icon-button class="text-red-500 hover:text-red-700" (click)="removeChargeCode(code)" aria-label="Remove charge code">
-          <mat-icon>remove</mat-icon>
-        </button>
-        <button mat-icon-button class="text-blue-500 hover:text-blue-700" (click)="openChargeCodeDialog(code.name)" aria-label="Manage users for charge code">
-          <mat-icon>group</mat-icon>
-        </button>
+    <button
+      class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md mb-4 disabled:opacity-50"
+      (click)="addChargeCode()"
+      [disabled]="loading"
+    >
+      Add Charge Code
+    </button>
+    <div *ngIf="chargeCodes.length === 0" class="text-gray-500 text-sm py-4">
+      No charge codes yet. Click "Add Charge Code" to create one.
+    </div>
+    <div *ngIf="chargeCodes.length > 0" class="divide-y divide-gray-200">
+      <div *ngFor="let code of chargeCodes" class="py-3 flex items-center justify-between">
+        <div class="flex-1">
+          <p class="text-gray-800 font-medium">{{ code.name }}</p>
+          <p class="text-gray-500 text-xs">Group: {{ code.cognitoGroup }}</p>
+          <p class="text-gray-400 text-xs">Created: {{ code.date | date:'short' }}</p>
+        </div>
+        <div class="flex gap-2">
+          <button
+            class="text-blue-500 hover:text-blue-700 p-2"
+            (click)="openChargeCodeDialog(code)"
+            aria-label="Manage users for charge code"
+            title="Manage Users"
+          >
+            <mat-icon>group</mat-icon>
+          </button>
+          <button
+            class="text-red-500 hover:text-red-700 p-2"
+            (click)="removeChargeCode(code)"
+            aria-label="Remove charge code"
+            title="Remove Charge Code"
+            [disabled]="loading"
+          >
+            <mat-icon>delete</mat-icon>
+          </button>
+        </div>
       </div>
     </div>
   </div>
 
-
   <div class="mt-6 flex justify-end gap-3">
-    <button mat-button class="border border-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-100" (click)="dialogRef.close()" aria-label="Cancel">Cancel</button>
+    <button
+      mat-button
+      class="border border-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-100 disabled:opacity-50"
+      (click)="dialogRef.close()"
+      [disabled]="loading"
+      aria-label="Cancel"
+    >
+      Cancel
+    </button>
     <button
       mat-raised-button
-      class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
+      class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
       (click)="save()"
-      [disabled]="form.invalid"
+      [disabled]="form.invalid || loading"
       aria-label="Save account"
-    >Save</button>
+    >
+      {{ loading ? 'Saving...' : 'Save' }}
+    </button>
   </div>
-</div> -->
+</div>
