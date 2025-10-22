@@ -40,7 +40,7 @@
     "angular-calendar": "^0.32.0",
     "angular-draggable-droppable": "^9.0.1",
     "angular-resizable-element": "^8.0.0",
-    "aws-amplify": "^6.15.7",
+    "aws-amplify": "^6.5.4",
     "calendar-utils": "^0.10.4",
     "date-fns": "^4.1.0",
     "rxjs": "~7.8.0",

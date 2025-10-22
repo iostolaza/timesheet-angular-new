@@ -1,6 +1,5 @@
 
 // src/app/financial/charge-codes-dialog.component.ts
-
 // file: src/app/financial/charge-code/charge-code-dialog.component.ts
 import { Component, Inject, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';

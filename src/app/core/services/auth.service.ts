@@ -1,13 +1,14 @@
 
+
 // file: src/app/core/services/auth.service.ts
 import { Injectable } from '@angular/core';
 import { Amplify } from 'aws-amplify';
-import { signIn, signOut, signUp, fetchAuthSession, confirmSignUp, confirmSignIn } from 'aws-amplify/auth';
+import { signIn, signOut, signUp, fetchAuthSession, confirmSignUp, confirmSignIn, getCurrentUser } from 'aws-amplify/auth';
 import { Hub } from 'aws-amplify/utils';
 import { generateClient } from 'aws-amplify/data';
 import type { Schema } from '../../../../amplify/data/resource';
 import { Observable, from, BehaviorSubject, throwError, of, firstValueFrom } from 'rxjs';
-import { map, switchMap, filter, catchError, timeout } from 'rxjs/operators';
+import { map, switchMap, filter, catchError, timeout, debounceTime } from 'rxjs/operators';
 import outputs from '../../../../amplify_outputs.json';
 import { User } from '../models/financial.model';
 
@@ -28,10 +29,14 @@ export class AuthService {
   private userSubject = new BehaviorSubject<User | null>(null);
   private client = generateClient<Schema>();
   private isInitialized = false;
+  private initializationPromise: Promise<void> | null = null;
 
   constructor() {
     Amplify.configure(outputs);
-    this.initializeUser();
+    this.setupAuthListener();
+  }
+
+  private setupAuthListener() {
     Hub.listen('auth', ({ payload }: { payload: HubPayload }) => {
       const { event, data } = payload;
       if (event === 'signedIn' && data?.tokens?.idToken?.payload) {
@@ -52,20 +57,29 @@ export class AuthService {
       } else if (event === 'signedOut') {
         this.userSubject.next(null);
         this.isInitialized = false;
+        this.initializationPromise = null;
       }
     });
   }
 
-  private async initializeUser() {
+  private async initializeUser(): Promise<void> {
     if (this.isInitialized) return;
-    this.isInitialized = true;
-    try {
-      const user = await firstValueFrom(this.getCurrentUser());
-      this.userSubject.next(user);
-    } catch (error) {
-      console.error('AuthService initializeUser error:', error);
-      this.userSubject.next(null);
-    }
+    if (this.initializationPromise) return this.initializationPromise;
+
+    this.initializationPromise = (async () => {
+      this.isInitialized = true;
+      try {
+        const user = await firstValueFrom(this.getCurrentUser());
+        this.userSubject.next(user);
+      } catch (error) {
+        console.error('AuthService initializeUser error:', error);
+        this.userSubject.next(null);
+      } finally {
+        this.initializationPromise = null;
+      }
+    })();
+
+    return this.initializationPromise;
   }
 
   private deriveRoleFromGroups(groups: string[]): 'Employee' | 'Manager' | 'Admin' {
@@ -121,6 +135,7 @@ export class AuthService {
       map(() => {
         this.userSubject.next(null);
         this.isInitialized = false;
+        this.initializationPromise = null;
         return undefined;
       }),
       catchError((error: any) => throwError(() => new Error(`Sign-out failed: ${error.message}`)))
@@ -128,34 +143,140 @@ export class AuthService {
   }
 
   getCurrentUser(): Observable<User | null> {
-    return this.userSubject.asObservable().pipe(
-      switchMap((cachedUser) => {
-        if (cachedUser) return of(cachedUser);
-        return from(fetchAuthSession({ forceRefresh: true })).pipe(
-          map((session) => {
-            if (!session.tokens?.idToken?.payload) return null;
-            const payload = session.tokens.idToken.payload as Record<string, unknown>;
-            const sub = payload['sub'] as string;
-            if (!sub) return null;
-            const groups = Array.isArray(payload['cognito:groups']) ? payload['cognito:groups'] as string[] : [];
-            const user: User = {
-              id: sub,
-              email: ((payload['email'] || payload['cognito:username'] || payload['preferred_username'] || '') as string),
-              name: 'Default User',
-              role: this.deriveRoleFromGroups(groups),
-              rate: 25.0,
-              groups,
-            };
-            console.log('getCurrentUser success:', user);
-            return user;
-          }),
-          catchError((error: any) => {
-            console.error('getCurrentUser error:', error);
-            return of(null);
-          })
-        );
-      })
+    return from(this.initializeUser()).pipe(
+      switchMap(() => this.userSubject.asObservable().pipe(
+        debounceTime(100), // Prevent rapid successive calls
+        switchMap((cachedUser) => {
+          if (cachedUser) return of(cachedUser);
+          return from(fetchAuthSession({ forceRefresh: true })).pipe(
+            map((session) => {
+              if (!session.tokens?.idToken?.payload) return null;
+              const payload = session.tokens.idToken.payload as Record<string, unknown>;
+              const sub = payload['sub'] as string;
+              if (!sub) return null;
+              const groups = Array.isArray(payload['cognito:groups']) ? payload['cognito:groups'] as string[] : [];
+              const user: User = {
+                id: sub,
+                email: ((payload['email'] || payload['cognito:username'] || payload['preferred_username'] || '') as string),
+                name: 'Default User',
+                role: this.deriveRoleFromGroups(groups),
+                rate: 25.0,
+                groups,
+              };
+              console.log('getCurrentUser success:', user);
+              return user;
+            }),
+            catchError((error: any) => {
+              console.error('getCurrentUser error:', error);
+              return of(null);
+            })
+          );
+        })
+      ))
     );
+  }
+
+  async getCurrentUserId(): Promise<string> {
+    try {
+      const user = await getCurrentUser();
+      return user.userId;
+    } catch (error) {
+      console.error('Error getting current user:', error);
+      throw error;
+    }
+  }
+
+  async getCurrentUserEmail(): Promise<string> {
+    try {
+      const user = await getCurrentUser();
+      return user.signInDetails?.loginId || '';
+    } catch (error) {
+      console.error('Error getting user email:', error);
+      throw error;
+    }
+  }
+
+  async createUser(user: Omit<User, 'owner'>): Promise<User | null> {
+    try {
+      const { data, errors } = await this.client.models.User.create(user, { authMode: 'userPool' });
+      if (errors) {
+        console.error('Error creating user:', errors);
+        throw new Error(errors[0].message);
+      }
+      return data as User;
+    } catch (error) {
+      console.error('Failed to create user:', error);
+      throw error;
+    }
+  }
+
+  async updateUser(id: string, updates: Partial<User>): Promise<User | null> {
+    try {
+      const { data, errors } = await this.client.models.User.update({
+        id,
+        ...updates
+      }, { authMode: 'userPool' });
+      if (errors) {
+        console.error('Error updating user:', errors);
+        throw new Error(errors[0].message);
+      }
+      return data as User;
+    } catch (error) {
+      console.error('Failed to update user:', error);
+      throw error;
+    }
+  }
+
+  async getUser(id: string): Promise<User | null> {
+    try {
+      const { data, errors } = await this.client.models.User.get({ id }, { authMode: 'userPool' });
+      if (errors) {
+        console.error('Error fetching user:', errors);
+        return null;
+      }
+      return data as User;
+    } catch (error) {
+      console.error('Failed to fetch user:', error);
+      return null;
+    }
+  }
+
+  async getCurrentUserProfile(): Promise<User | null> {
+    try {
+      const userId = await this.getCurrentUserId();
+      return await this.getUser(userId);
+    } catch (error) {
+      console.error('Failed to fetch current user profile:', error);
+      return null;
+    }
+  }
+
+  async listUsers(): Promise<User[]> {
+    try {
+      const { data, errors } = await this.client.models.User.list({ authMode: 'userPool' });
+      if (errors) {
+        console.error('Error listing users:', errors);
+        return [];
+      }
+      return data as User[];
+    } catch (error) {
+      console.error('Failed to list users:', error);
+      return [];
+    }
+  }
+
+  async deleteUser(id: string): Promise<boolean> {
+    try {
+      const { data, errors } = await this.client.models.User.delete({ id }, { authMode: 'userPool' });
+      if (errors) {
+        console.error('Error deleting user:', errors);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error('Failed to delete user:', error);
+      return false;
+    }
   }
 
   async createUserIfNotExists(user: User): Promise<void> {
@@ -200,20 +321,9 @@ export class AuthService {
     const groups = await this.getUserGroups();
     return groups.includes('Manager');
   }
-
-  async listUsers(): Promise<User[]> {
-    try {
-      const { data, errors } = await this.client.models.User.list({ authMode: 'userPool' });
-      if (errors?.length) {
-        throw new Error(`Failed to list users: ${errors.map(e => e.message).join(', ')}`);
-      }
-      return data as User[];
-    } catch (error) {
-      console.error('Error listing users:', error);
-      return [];
-    }
-  }
 }
+
+
 // file: src/app/core/services/auth.service.ts
 // import { Injectable } from '@angular/core';
 // import { Amplify } from 'aws-amplify';

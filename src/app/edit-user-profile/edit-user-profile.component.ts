@@ -1,15 +1,28 @@
-// src/app/edit-user-profile/edit-user-profile.component.ts
-import { Component, OnInit } from '@angular/core';
+// file: src/app/edit-user-profile/edit-user-profile.component.ts
+import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { UserService, User } from '../core/services/user.service';
+import { AuthService } from '../core/services/auth.service';
+import { User } from '../core/models/financial.model';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatButtonModule } from '@angular/material/button';
+import { MatSelectModule } from '@angular/material/select';
 
 @Component({
   selector: 'app-edit-user-profile',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
-  templateUrl: './edit-user-profile.component.html'
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatButtonModule,
+    MatSelectModule,
+  ],
+  templateUrl: './edit-user-profile.component.html',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class EditUserProfileComponent implements OnInit {
   userForm!: FormGroup;
@@ -21,15 +34,15 @@ export class EditUserProfileComponent implements OnInit {
 
   constructor(
     private fb: FormBuilder,
-    private userService: UserService,
-    public router: Router  // Make public
+    private authService: AuthService,
+    public router: Router
   ) {}
 
   async ngOnInit() {
     this.loading = true;
     
     try {
-      this.currentUser = await this.userService.getCurrentUserProfile();
+      this.currentUser = await this.authService.getCurrentUserProfile();
       
       if (!this.currentUser) {
         this.errorMessage = 'User profile not found. Please create your profile first.';
@@ -75,7 +88,7 @@ export class EditUserProfileComponent implements OnInit {
         groups: formValue.groups || [],
       };
 
-      const result = await this.userService.updateUser(this.currentUser.id, updates);
+      const result = await this.authService.updateUser(this.currentUser.id, updates);
       
       if (result) {
         this.successMessage = 'Profile updated successfully!';
@@ -115,7 +128,7 @@ export class EditUserProfileComponent implements OnInit {
     if (confirmed) {
       this.loading = true;
       try {
-        const success = await this.userService.deleteUser(this.currentUser.id);
+        const success = await this.authService.deleteUser(this.currentUser.id);
         if (success) {
           alert('Profile deleted successfully');
           this.router.navigate(['/']);

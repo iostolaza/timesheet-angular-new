@@ -1,15 +1,28 @@
-// src/app/create-user-profile/create-user-profile.component.ts
-import { Component, OnInit } from '@angular/core';
+// file: src/app/create-user-profile/create-user-profile.component.ts
+import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { UserService } from '../core/services/user.service'; // FIXED PATH
+import { AuthService } from '../core/services/auth.service';
+import { User } from '../core/models/financial.model';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatButtonModule } from '@angular/material/button';
+import { MatSelectModule } from '@angular/material/select';
 
 @Component({
   selector: 'app-create-user-profile',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
-  templateUrl: './create-user-profile.component.html'
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatButtonModule,
+    MatSelectModule,
+  ],
+  templateUrl: './create-user-profile.component.html',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CreateUserProfileComponent implements OnInit {
   userForm!: FormGroup;
@@ -20,14 +33,14 @@ export class CreateUserProfileComponent implements OnInit {
 
   constructor(
     private fb: FormBuilder,
-    private userService: UserService,
+    private authService: AuthService,
     public router: Router
   ) {}
 
   async ngOnInit() {
     try {
-      const userId = await this.userService.getCurrentUserId();
-      const email = await this.userService.getCurrentUserEmail();
+      const userId = await this.authService.getCurrentUserId();
+      const email = await this.authService.getCurrentUserEmail();
 
       this.userForm = this.fb.group({
         id: [userId, Validators.required],
@@ -35,7 +48,7 @@ export class CreateUserProfileComponent implements OnInit {
         name: ['', [Validators.required, Validators.minLength(2)]],
         role: ['Employee', Validators.required],
         rate: [0, [Validators.required, Validators.min(0)]],
-        groups: [[]]
+        groups: [[]],
       });
     } catch (error) {
       console.error('Error initializing form:', error);
@@ -56,7 +69,7 @@ export class CreateUserProfileComponent implements OnInit {
     try {
       const formValue = this.userForm.getRawValue();
       
-      const newUser = {
+      const newUser: Omit<User, 'owner'> = {
         id: formValue.id,
         email: formValue.email,
         name: formValue.name,
@@ -65,7 +78,7 @@ export class CreateUserProfileComponent implements OnInit {
         groups: formValue.groups || [],
       };
 
-      const result = await this.userService.createUser(newUser);
+      const result = await this.authService.createUser(newUser);
       
       if (result) {
         this.successMessage = 'Profile created successfully!';
