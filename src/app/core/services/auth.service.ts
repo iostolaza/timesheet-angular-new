@@ -1,5 +1,5 @@
 
-// src/app/core/services/auth.service.ts
+// file: src/app/core/services/auth.service.ts
 import { Injectable } from '@angular/core';
 import { Amplify } from 'aws-amplify';
 import { signIn, signOut, signUp, fetchAuthSession, confirmSignUp, confirmSignIn } from 'aws-amplify/auth';
@@ -201,16 +201,6 @@ export class AuthService {
     return groups.includes('Manager');
   }
 
-  async createGroup(groupName: string): Promise<void> {
-    console.log('createGroup stub called for:', groupName);
-    // Implementation moved to FinancialService
-  }
-
-  async addUserToGroup(email: string, groupName: string): Promise<void> {
-    console.log('addUserToGroup stub called for:', email, groupName);
-    // Implementation moved to FinancialService
-  }
-
   async listUsers(): Promise<User[]> {
     try {
       const { data, errors } = await this.client.models.User.list({ authMode: 'userPool' });
@@ -224,7 +214,6 @@ export class AuthService {
     }
   }
 }
-
 // file: src/app/core/services/auth.service.ts
 // import { Injectable } from '@angular/core';
 // import { Amplify } from 'aws-amplify';

@@ -1,3 +1,5 @@
+
+
 // file: src/app/core/services/financial.service.ts
 import { Injectable } from '@angular/core';
 import { generateClient } from 'aws-amplify/data';
@@ -6,19 +8,16 @@ import { v4 as uuidv4 } from 'uuid';
 import type { Schema } from '../../../../amplify/data/resource';
 import { Account, Transaction, AccountModel, TransactionModel, User } from '../models/financial.model';
 import { AuthService } from './auth.service';
-import { CognitoIdentityProviderClient, CreateGroupCommand, AdminAddUserToGroupCommand, AdminRemoveUserFromGroupCommand } from '@aws-sdk/client-cognito-identity-provider';
+import { CognitoGroupService } from './cognito-group.service';
 
 @Injectable({ providedIn: 'root' })
 export class FinancialService {
   private client = generateClient<Schema>();
-  private cognitoClient: CognitoIdentityProviderClient;
-  private userPoolId: string = 'us-west-1_KfNSgZaRI';
 
-  constructor(private authService: AuthService) {
-    this.cognitoClient = new CognitoIdentityProviderClient({
-      region: 'us-west-1',
-    });
-  }
+  constructor(
+    private authService: AuthService,
+    private cognitoGroupService: CognitoGroupService
+  ) {}
 
   private mapAccountFromSchema(data: AccountModel): Account {
     let chargeCodes: Account['chargeCodes'] = [];
@@ -76,7 +75,7 @@ export class FinancialService {
       chargeCodesJson: JSON.stringify(account.chargeCodes ?? []),
     };
 
-    console.log('Creating account with input:', input); // Debug log
+    console.log('Creating account with input:', input);
     const { data, errors } = await this.client.models.Account.create(input, { authMode: 'userPool' });
     if (errors?.length) {
       throw new Error(`Failed to create account: ${errors.map((e: any) => e.message).join(', ')}`);
@@ -119,7 +118,7 @@ export class FinancialService {
   }
 
   async updateAccount(id: string, updates: Partial<Account>): Promise<Account> {
-    const currentAccount = await this.getAccount(id); // Fetch current account to preserve existing values
+    const currentAccount = await this.getAccount(id);
     if (!currentAccount.accountNumber) {
       console.error('Current account has no accountNumber:', currentAccount);
       throw new Error('Current account number is missing');
@@ -127,19 +126,18 @@ export class FinancialService {
 
     const input: AccountModel = {
       id,
-      accountNumber: updates.accountNumber ?? currentAccount.accountNumber, // Preserve accountNumber
+      accountNumber: updates.accountNumber ?? currentAccount.accountNumber,
       name: updates.name ?? currentAccount.name,
       balance: updates.balance ?? currentAccount.balance,
       date: updates.date ?? currentAccount.date,
-      type: updates.type ?? currentAccount.type, // Type-safe due to updated Account interface
-      details: updates.details ?? currentAccount.details, // Type-safe due to updated Account interface
-      startingBalance: updates.startingBalance ?? currentAccount.startingBalance, // Type-safe
-      endingBalance: updates.endingBalance ?? currentAccount.endingBalance, // Type-safe
-      chargeCodesJson: updates.chargeCodes ? JSON.stringify(updates.chargeCodes) : JSON.stringify(currentAccount.chargeCodes ?? []), // Use chargeCodes
+      type: updates.type ?? currentAccount.type,
+      details: updates.details ?? currentAccount.details,
+      startingBalance: updates.startingBalance ?? currentAccount.startingBalance,
+      endingBalance: updates.endingBalance ?? currentAccount.endingBalance,
+      chargeCodesJson: updates.chargeCodes ? JSON.stringify(updates.chargeCodes) : JSON.stringify(currentAccount.chargeCodes ?? []),
     };
 
-    console.log('Updating account with input:', input); // Debug log to verify input
-
+    console.log('Updating account with input:', input);
     const { data, errors } = await this.client.models.Account.update(input, { authMode: 'userPool' });
     if (errors?.length) {
       throw new Error(`Failed to update account: ${errors.map(e => e.message).join(', ')}`);
@@ -195,18 +193,13 @@ export class FinancialService {
 
   private generateChargeCode(name: string, accountNumber: string): string {
     const short = (name || '').replace(/[^A-Z0-9]/gi, '').slice(0, 2).toUpperCase() || 'CC';
-    const mid = accountNumber && accountNumber.length >= 3 ? accountNumber.slice(-3) : '000'; // Validate accountNumber
-    const rand = Math.floor(100 + Math.random() * 900); // Ensure 3-digit random number
-    console.log('Generating charge code:', { name, accountNumber, result: `${short}-${mid}-${rand}` }); // Debug log
+    const mid = accountNumber && accountNumber.length >= 3 ? accountNumber.slice(-3) : '000';
+    const rand = Math.floor(100 + Math.random() * 900);
+    console.log('Generating charge code:', { name, accountNumber, result: `${short}-${mid}-${rand}` });
     return `${short}-${mid}-${rand}`;
   }
 
   async createChargeCode(account: Account): Promise<Account['chargeCodes'][number]> {
-    const isAdmin = await this.authService.isAdmin();
-    if (!isAdmin) {
-      throw new Error('Admin access required to create charge codes');
-    }
-
     if (!account.accountNumber) {
       console.error('Invalid account number for charge code creation:', account);
       throw new Error('Account number is required for charge code creation');
@@ -225,107 +218,26 @@ export class FinancialService {
 
     const updatedChargeCodes = [...(account.chargeCodes ?? []), chargeCode];
     await this.updateAccount(account.id, {
-      accountNumber: account.accountNumber, // Explicitly preserve accountNumber
+      accountNumber: account.accountNumber,
       balance: account.balance,
       endingBalance: account.endingBalance,
       chargeCodes: updatedChargeCodes
     });
 
-    await this.authService.createGroup(chargeCode.cognitoGroup);
+    try {
+      await this.cognitoGroupService.createGroup(chargeCode.cognitoGroup);
+      console.log('Charge code and group created:', chargeCode);
+    } catch (error: any) {
+      console.error('Failed to create Cognito group for charge code:', error);
+      throw new Error(`Failed to create charge code group: ${error.message || error}`);
+    }
+
     return chargeCode;
   }
 
   async listChargeCodes(accountId: string): Promise<Account['chargeCodes']> {
     const account = await this.getAccount(accountId);
     return account.chargeCodes ?? [];
-  }
-
-  async createGroup(groupName: string): Promise<void> {
-    try {
-      const isAdmin = await this.authService.isAdmin();
-      if (!isAdmin) {
-        throw new Error('Admin access required to create groups');
-      }
-      const command = new CreateGroupCommand({
-        UserPoolId: this.userPoolId,
-        GroupName: groupName,
-      });
-      await this.cognitoClient.send(command);
-      console.log(`Group ${groupName} created`);
-    } catch (error: any) {
-      console.error('Error creating group:', error);
-      throw new Error(`Failed to create group: ${error.message || error}`);
-    }
-  }
-
-  async addUserToGroup(email: string, groupName: string): Promise<void> {
-    try {
-      const isAdmin = await this.authService.isAdmin();
-      if (!isAdmin) {
-        throw new Error('Admin access required to manage groups');
-      }
-      const command = new AdminAddUserToGroupCommand({
-        UserPoolId: this.userPoolId,
-        Username: email,
-        GroupName: groupName,
-      });
-      await this.cognitoClient.send(command);
-      const users = await this.listUsers();
-      const user = users.find(u => u.email === email);
-      if (!user) {
-        throw new Error(`User with email ${email} not found`);
-      }
-      const currentGroups = user.groups || [];
-      if (!currentGroups.includes(groupName)) {
-        const updatedGroups = [...currentGroups, groupName];
-        await this.updateUserGroups(user.id, updatedGroups);
-      }
-      console.log(`Added user ${email} to group ${groupName}`);
-    } catch (error: any) {
-      console.error('Error adding user to group:', error);
-      throw new Error(`Failed to add user to group: ${error.message || error}`);
-    }
-  }
-
-  async removeUserFromGroup(email: string, groupName: string): Promise<void> {
-    try {
-      const isAdmin = await this.authService.isAdmin();
-      if (!isAdmin) {
-        throw new Error('Admin access required to manage groups');
-      }
-      const command = new AdminRemoveUserFromGroupCommand({
-        UserPoolId: this.userPoolId,
-        Username: email,
-        GroupName: groupName,
-      });
-      await this.cognitoClient.send(command);
-      const users = await this.listUsers();
-      const user = users.find(u => u.email === email);
-      if (user) {
-        const updatedGroups = (user.groups || []).filter(g => g !== groupName);
-        await this.updateUserGroups(user.id, updatedGroups);
-      }
-      console.log(`Removed user ${email} from group ${groupName}`);
-    } catch (error: any) {
-      console.error('Error removing user from group:', error);
-      throw new Error(`Failed to remove user from group: ${error.message || error}`);
-    }
-  }
-
-  private async updateUserGroups(userId: string, groups: string[]): Promise<void> {
-    try {
-      const { data, errors } = await this.client.models.User.update({
-        id: userId,
-        groups,
-      }, { authMode: 'userPool' });
-      if (errors?.length) {
-        throw new Error(`Failed to update user groups: ${errors.map(e => e.message).join(', ')}`);
-      }
-      console.log('Updated user groups:', data);
-    } catch (error) {
-      console.error('Error updating user groups:', error);
-      throw error;
-    }
   }
 
   async listUsers(): Promise<User[]> {
