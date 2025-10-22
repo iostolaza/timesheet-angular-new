@@ -35,10 +35,10 @@ export class FinancialService {
       id: data.id,
       accountNumber: data.accountNumber,
       name: data.name,
-      details: data.details ?? undefined,
+      details: data.details,
       balance: data.balance,
       startingBalance: data.startingBalance ?? 0,
-      endingBalance: data.endingBalance ?? undefined,
+      endingBalance: data.endingBalance,
       date: data.date,
       type: data.type,
       chargeCodes,
@@ -59,33 +59,33 @@ export class FinancialService {
     };
   }
 
- // src/app/core/services/financial.service.ts - Fix line 75
-async createAccount(account: Omit<Account, 'id' | 'accountNumber'>): Promise<Account> {
-  const id = uuidv4();
-  const accountNumber = this.generateAccountNumber(id);
+  async createAccount(account: Omit<Account, 'id' | 'accountNumber'>): Promise<Account> {
+    const id = uuidv4();
+    const accountNumber = this.generateAccountNumber(id);
 
-  const input: AccountModel = {
-    id,
-    accountNumber,
-    name: account.name,
-    details: account.details ?? null,
-    balance: account.balance ?? 0,
-    startingBalance: account.startingBalance ?? account.balance ?? 0,
-    endingBalance: account.endingBalance ?? account.balance ?? 0,
-    date: account.date ?? new Date().toISOString().split('T')[0],
-    type: account.type ?? null, // FIXED: Added null coalescing
-    chargeCodesJson: JSON.stringify(account.chargeCodes ?? []),
-  };
+    const input: AccountModel = {
+      id,
+      accountNumber,
+      name: account.name,
+      details: account.details ?? null,
+      balance: account.balance ?? 0,
+      startingBalance: account.startingBalance ?? account.balance ?? 0,
+      endingBalance: account.endingBalance ?? account.balance ?? 0,
+      date: account.date ?? new Date().toISOString().split('T')[0],
+      type: account.type ?? null,
+      chargeCodesJson: JSON.stringify(account.chargeCodes ?? []),
+    };
 
-  const { data, errors } = await this.client.models.Account.create(input, { authMode: 'userPool' });
-  if (errors?.length) {
-    throw new Error(`Failed to create account: ${errors.map((e: any) => e.message).join(', ')}`); // FIXED: Added type
+    console.log('Creating account with input:', input); // Debug log
+    const { data, errors } = await this.client.models.Account.create(input, { authMode: 'userPool' });
+    if (errors?.length) {
+      throw new Error(`Failed to create account: ${errors.map((e: any) => e.message).join(', ')}`);
+    }
+    if (!data) {
+      throw new Error('No data returned from account creation');
+    }
+    return this.mapAccountFromSchema(data as AccountModel);
   }
-  if (!data) {
-    throw new Error('No data returned from account creation');
-  }
-  return this.mapAccountFromSchema(data as AccountModel);
-}
 
   async getAccount(id: string): Promise<Account> {
     const { data, errors } = await this.client.models.Account.get({ id }, { authMode: 'userPool' });
@@ -119,18 +119,26 @@ async createAccount(account: Omit<Account, 'id' | 'accountNumber'>): Promise<Acc
   }
 
   async updateAccount(id: string, updates: Partial<Account>): Promise<Account> {
+    const currentAccount = await this.getAccount(id); // Fetch current account to preserve existing values
+    if (!currentAccount.accountNumber) {
+      console.error('Current account has no accountNumber:', currentAccount);
+      throw new Error('Current account number is missing');
+    }
+
     const input: AccountModel = {
       id,
-      accountNumber: '',
-      name: updates.name ?? '',
-      balance: updates.balance ?? 0,
-      date: updates.date ?? '',
-      type: updates.type ?? 'Asset',
-      details: updates.details ?? null,
-      startingBalance: updates.startingBalance ?? null,
-      endingBalance: updates.endingBalance ?? null,
-      chargeCodesJson: updates.chargeCodes ? JSON.stringify(updates.chargeCodes) : null,
+      accountNumber: updates.accountNumber ?? currentAccount.accountNumber, // Preserve accountNumber
+      name: updates.name ?? currentAccount.name,
+      balance: updates.balance ?? currentAccount.balance,
+      date: updates.date ?? currentAccount.date,
+      type: updates.type ?? currentAccount.type, // Type-safe due to updated Account interface
+      details: updates.details ?? currentAccount.details, // Type-safe due to updated Account interface
+      startingBalance: updates.startingBalance ?? currentAccount.startingBalance, // Type-safe
+      endingBalance: updates.endingBalance ?? currentAccount.endingBalance, // Type-safe
+      chargeCodesJson: updates.chargeCodes ? JSON.stringify(updates.chargeCodes) : JSON.stringify(currentAccount.chargeCodes ?? []), // Use chargeCodes
     };
+
+    console.log('Updating account with input:', input); // Debug log to verify input
 
     const { data, errors } = await this.client.models.Account.update(input, { authMode: 'userPool' });
     if (errors?.length) {
@@ -187,12 +195,23 @@ async createAccount(account: Omit<Account, 'id' | 'accountNumber'>): Promise<Acc
 
   private generateChargeCode(name: string, accountNumber: string): string {
     const short = (name || '').replace(/[^A-Z0-9]/gi, '').slice(0, 2).toUpperCase() || 'CC';
-    const mid = accountNumber.slice(-3);
-    const rand = Math.floor(10 + Math.random() * 90);
+    const mid = accountNumber && accountNumber.length >= 3 ? accountNumber.slice(-3) : '000'; // Validate accountNumber
+    const rand = Math.floor(100 + Math.random() * 900); // Ensure 3-digit random number
+    console.log('Generating charge code:', { name, accountNumber, result: `${short}-${mid}-${rand}` }); // Debug log
     return `${short}-${mid}-${rand}`;
   }
 
   async createChargeCode(account: Account): Promise<Account['chargeCodes'][number]> {
+    const isAdmin = await this.authService.isAdmin();
+    if (!isAdmin) {
+      throw new Error('Admin access required to create charge codes');
+    }
+
+    if (!account.accountNumber) {
+      console.error('Invalid account number for charge code creation:', account);
+      throw new Error('Account number is required for charge code creation');
+    }
+
     const name = this.generateChargeCode(account.name, account.accountNumber);
     const currentUser = await firstValueFrom(this.authService.getCurrentUser());
     const createdBy = currentUser?.id ?? 'system';
@@ -205,9 +224,14 @@ async createAccount(account: Omit<Account, 'id' | 'accountNumber'>): Promise<Acc
     };
 
     const updatedChargeCodes = [...(account.chargeCodes ?? []), chargeCode];
-    await this.updateAccount(account.id, { balance: account.balance, endingBalance: account.endingBalance, chargeCodes: updatedChargeCodes });
-    await this.authService.createGroup(chargeCode.cognitoGroup);
+    await this.updateAccount(account.id, {
+      accountNumber: account.accountNumber, // Explicitly preserve accountNumber
+      balance: account.balance,
+      endingBalance: account.endingBalance,
+      chargeCodes: updatedChargeCodes
+    });
 
+    await this.authService.createGroup(chargeCode.cognitoGroup);
     return chargeCode;
   }
 

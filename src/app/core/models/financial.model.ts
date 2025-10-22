@@ -1,4 +1,4 @@
-// src/app/core/models/financial.model.ts
+// file: src/app/core/models/financial.model.ts
 export interface User {
   id: string;
   email: string;
@@ -12,12 +12,12 @@ export interface Account {
   id: string;
   accountNumber: string;
   name: string;
-  details?: string;
+  details: string | null; // Aligned with AccountModel
   balance: number;
-  startingBalance?: number;
-  endingBalance?: number;
+  startingBalance: number | null; // Aligned with AccountModel
+  endingBalance: number | null; // Aligned with AccountModel
   date: string;
-  type?: 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Expense' | null;
+  type: 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Expense' | null; // Aligned with AccountModel
   chargeCodes: Array<{
     name: string;
     cognitoGroup: string;

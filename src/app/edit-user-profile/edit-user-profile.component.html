@@ -1,5 +1,4 @@
-<!-- src/app/user/edit-user-profile/edit-user-profile.component.html -->
-
+<!-- file: src/app/user/edit-user-profile/edit-user-profile.component.html -->
 <div class="min-h-screen bg-gray-50 py-8 px-4">
   <div class="max-w-2xl mx-auto">
     <div class="bg-white rounded-2xl shadow-xl p-8">
@@ -140,7 +139,7 @@
             type="button"
             class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             (click)="save()"
-            [disabled]="userForm?.invalid || loading"
+            [disabled]="userForm.invalid || loading"
           >
             {{ loading ? 'Saving...' : 'Save Changes' }}
           </button>

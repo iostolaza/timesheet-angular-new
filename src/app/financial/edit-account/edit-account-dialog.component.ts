@@ -1,4 +1,4 @@
-// src/app/financial/edit-account/edit-account-dialog.component.ts
+// file: src/app/financial/edit-account/edit-account-dialog.component.ts
 import { Component, Inject, OnInit } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
@@ -6,7 +6,9 @@ import { MAT_DIALOG_DATA, MatDialogRef, MatDialog, MatDialogModule } from '@angu
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { FinancialService } from '../../core/services/financial.service';
+import { AuthService } from '../../core/services/auth.service';
 import { Account } from '../../core/models/financial.model';
+import { firstValueFrom } from 'rxjs';
 
 @Component({
   selector: 'app-edit-account-dialog',
@@ -19,7 +21,7 @@ import { Account } from '../../core/models/financial.model';
     MatIconModule,
     DatePipe,
   ],
-  templateUrl: './edit-account-dialog.component.html'
+  templateUrl: './edit-account-dialog.component.html',
 })
 export class EditAccountDialogComponent implements OnInit {
   form!: FormGroup;
@@ -36,16 +38,17 @@ export class EditAccountDialogComponent implements OnInit {
   constructor(
     private fb: FormBuilder,
     private financialService: FinancialService,
+    private authService: AuthService,
     public dialogRef: MatDialogRef<EditAccountDialogComponent>,
     private dialog: MatDialog,
     @Inject(MAT_DIALOG_DATA) public data: { account: Account }
   ) {}
 
   ngOnInit() {
+    console.log('Initializing EditAccountDialogComponent', { accountId: this.data.account.id });
     const account = this.data.account;
     
     this.form = this.fb.group({
-      id: [{ value: account.id, disabled: true }],
       accountNumber: [{ value: account.accountNumber, disabled: true }],
       name: [account.name, [Validators.required, Validators.minLength(3)]],
       details: [account.details || ''],
@@ -60,6 +63,7 @@ export class EditAccountDialogComponent implements OnInit {
   async save() {
     if (this.form.invalid) {
       this.errorMessage = 'Please fill in all required fields correctly';
+      console.warn('Form invalid on save attempt', { formErrors: this.form.errors });
       return;
     }
 
@@ -76,11 +80,13 @@ export class EditAccountDialogComponent implements OnInit {
           addFunds,
           'Funds added via edit dialog'
         );
+        console.log('Funds added', { accountId: this.data.account.id, amount: addFunds });
       }
 
       const updatedAccount = await this.financialService.getAccount(this.data.account.id);
 
       const updates: Partial<Account> = {
+        accountNumber: this.data.account.accountNumber, // Preserve accountNumber
         name: formValue.name,
         details: formValue.details || undefined,
         balance: updatedAccount.balance,
@@ -95,6 +101,7 @@ export class EditAccountDialogComponent implements OnInit {
       );
 
       if (result) {
+        console.log('Account updated successfully', { accountId: this.data.account.id });
         this.dialogRef.close(result);
       }
     } catch (error: any) {
@@ -110,6 +117,11 @@ export class EditAccountDialogComponent implements OnInit {
     this.errorMessage = '';
 
     try {
+      const isAdmin = await this.authService.isAdmin();
+      if (!isAdmin) {
+        throw new Error('Admin access required to create charge codes');
+      }
+
       const newChargeCode = await this.financialService.createChargeCode(this.data.account);
       this.chargeCodes = [...this.chargeCodes, newChargeCode];
       
@@ -133,9 +145,15 @@ export class EditAccountDialogComponent implements OnInit {
       this.errorMessage = '';
 
       try {
+        const isAdmin = await this.authService.isAdmin();
+        if (!isAdmin) {
+          throw new Error('Admin access required to remove charge codes');
+        }
+
         this.chargeCodes = this.chargeCodes.filter(c => c.name !== code.name);
         
         await this.financialService.updateAccount(this.data.account.id, {
+          accountNumber: this.data.account.accountNumber, // Preserve accountNumber
           balance: this.data.account.balance,
           endingBalance: this.data.account.endingBalance,
           chargeCodes: this.chargeCodes,
@@ -157,7 +175,6 @@ export class EditAccountDialogComponent implements OnInit {
     alert(`Charge Code Management for: ${cognitoGroup}\n\nThis will open a dialog to add/remove users from this charge code group.`);
   }
 }
-
 // file: src/app/financial/edit-account/edit-account-dialog.component.ts
 // import { Component, Inject, ChangeDetectorRef, inject } from '@angular/core';
 // import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule, MatDialog } from '@angular/material/dialog';
