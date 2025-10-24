@@ -1,42 +1,41 @@
 <!-- file: src/app/financial/charge-code/charge-code-dialog.component.html -->
 <div class="bg-white rounded-2xl shadow-xl p-6 max-h-[80vh] overflow-y-auto">
-  <h2 class="text-2xl font-bold text-gray-800 mb-4">Manage Charge Code: {{ data.chargeCodeName }}</h2>
-  <div *ngIf="errorMessage" class="text-red-500 text-sm mb-4" role="alert">{{ errorMessage }}</div>
-  <div *ngIf="loading" class="text-gray-600 mb-4">Loading...</div>
+  <h2 class="text-2xl font-bold text-gray-800 mb-4">Manage Charge Code</h2>
+  <div *ngIf="errorMessage()" class="text-red-500 text-sm mb-4" role="alert">{{ errorMessage() }}</div>
+  <div *ngIf="loading()" class="text-gray-600 mb-4">Loading...</div>
 
   <!-- Charge Code Details Section -->
   <div class="mb-6">
-    <h3 class="text-lg font-semibold text-gray-800 mb-2">Charge Code Details</h3>
-    <p class="text-gray-700"><strong>Name:</strong> {{ data.chargeCodeName }}</p>
+    <p class="text-gray-700"><strong>Code:</strong> {{ data.chargeCodeName }}</p>
     <p class="text-gray-700"><strong>Linked Account:</strong> {{ data.account.accountNumber || 'N/A' }}</p>
-    <p class="text-gray-700"><strong>Created By:</strong> {{ data.createdBy || 'Unknown' }}</p>
-    <p class="text-gray-700"><strong>Date:</strong> {{ data.date | date:'short' }}</p>
+    <p class="text-gray-700"><strong>Created By:</strong> {{ createdBy() }}</p>
+    <p class="text-gray-700"><strong>Date:</strong> {{ date() | date:'short' }}</p>
   </div>
 
   <hr class="my-6 border-gray-200">
 
   <!-- Group Members Section -->
   <div>
-    <h3 class="text-lg font-semibold text-gray-800 mb-2">Group Members</h3>
+    <h3 class="text-lg font-semibold text-gray-800 mb-2">Search Members</h3>
     <div class="mb-4">
       <input
         type="text"
-        [(ngModel)]="searchQuery"
-        (input)="searchUsers()"
+        [ngModel]="searchQuery()"
+        (ngModelChange)="searchQuery.set($event); searchUsers()"
         class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
         placeholder="Search users by email or name"
         aria-label="Search users"
       />
     </div>
     <mat-selection-list [formControl]="selectedUsers" class="divide-y divide-gray-200">
-      <mat-list-option *ngFor="let user of filteredUsers" [value]="user.email" class="py-2 text-gray-700">
+      <mat-list-option *ngFor="let user of filteredUsers()" [value]="user.email" class="py-2 text-gray-700">
         {{ user.name }} ({{ user.email }})
       </mat-list-option>
     </mat-selection-list>
-    <div *ngIf="filteredUsers.length === 0" class="text-gray-600 mt-2">No users found</div>
+    <div *ngIf="filteredUsers().length === 0" class="text-gray-600 mt-2">No users found</div>
     <h3 class="text-lg font-semibold text-gray-800 mt-4 mb-2">Current Members</h3>
     <mat-list class="divide-y divide-gray-200">
-      <mat-list-item *ngFor="let member of groupMembers">
+      <mat-list-item *ngFor="let member of groupMembers()">
         {{ member.Username }}
         <button mat-icon-button (click)="removeUser(member.Username)" aria-label="Remove user">
           <mat-icon>delete</mat-icon>
@@ -51,7 +50,7 @@
       mat-raised-button
       class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
       (click)="save()"
-      [disabled]="loading || !selectedUsers.value?.length"
+      [disabled]="loading() || !selectedUsers.value?.length"
       aria-label="Save charge code users"
     >Save</button>
   </div>

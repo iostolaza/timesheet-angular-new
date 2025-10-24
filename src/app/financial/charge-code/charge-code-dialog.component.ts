@@ -1,22 +1,18 @@
 // file: src/app/financial/charge-code/charge-code-dialog.component.ts
-import { Component, Inject, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
-import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
+import { Component, Inject, ChangeDetectionStrategy, signal, computed } from '@angular/core';
+import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import { MatListModule } from '@angular/material/list';
-import { MatInputModule } from '@angular/material/input';
 import { MatIconModule } from '@angular/material/icon';
+import { MatListModule } from '@angular/material/list';
 import { CommonModule } from '@angular/common';
-import { FormsModule, ReactiveFormsModule, FormControl } from '@angular/forms';
+import { FormsModule } from '@angular/forms';
 import { CognitoGroupService } from '../../core/services/cognito-group.service';
 import { AuthService } from '../../core/services/auth.service';
-import { User } from '../../core/models/financial.model';
-
-interface DialogData {
-  chargeCodeName: string;
-  account: { id: string; accountNumber: string };
-  createdBy: string;
-  date: string;
-}
+import { User, Account } from '../../core/models/financial.model';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { debounceTime, switchMap, catchError } from 'rxjs/operators';
+import { of } from 'rxjs';
 
 @Component({
   selector: 'app-charge-code-dialog',
@@ -25,107 +21,121 @@ interface DialogData {
     CommonModule,
     FormsModule,
     ReactiveFormsModule,
-    MatDialogModule,
     MatButtonModule,
-    MatListModule,
-    MatInputModule,
     MatIconModule,
+    MatListModule,
   ],
   templateUrl: './charge-code-dialog.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ChargeCodeDialogComponent {
-  users: User[] = [];
-  filteredUsers: User[] = [];
-  groupMembers: { Username: string }[] = [];
+  // Signals for reactive state management
+  searchQuery = signal<string>('');
+  filteredUsers = signal<User[]>([]);
+  groupMembers = signal<any[]>([]);
+  loading = signal<boolean>(false);
+  errorMessage = signal<string | null>(null);
+
+  // Form control for selected users
   selectedUsers = new FormControl<string[]>([]);
-  searchQuery: string = '';
-  errorMessage: string | null = null;
-  loading = false;
+
+  // Computed property for charge code group name
+  chargeCodeGroup = computed(() => `chargecode-${this.data.chargeCodeName}`);
+
+  // Computed properties for charge code details
+  createdBy = computed(() => {
+    const chargeCode = this.data.account.chargeCodes?.find(cc => cc.name === this.data.chargeCodeName);
+    return chargeCode?.createdBy || 'Unknown';
+  });
+
+  date = computed(() => {
+    const chargeCode = this.data.account.chargeCodes?.find(cc => cc.name === this.data.chargeCodeName);
+    return chargeCode?.date || '';
+  });
 
   constructor(
     public dialogRef: MatDialogRef<ChargeCodeDialogComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: DialogData,
+    @Inject(MAT_DIALOG_DATA) public data: { chargeCodeName: string; account: Account },
     private cognitoGroupService: CognitoGroupService,
     private authService: AuthService,
-    private cdr: ChangeDetectorRef
+    private snackBar: MatSnackBar
   ) {
-    this.loadUsers();
+    // Initialize data load
     this.loadGroupMembers();
+
+    // Debounced search
+    this.selectedUsers.valueChanges.pipe(
+      debounceTime(300),
+      switchMap(() => this.searchUsers()),
+      catchError(err => {
+        this.errorMessage.set('Failed to search users: ' + err.message);
+        return of([]);
+      })
+    ).subscribe();
   }
 
-  async loadUsers() {
-    this.loading = true;
+  async searchUsers() {
+    this.loading.set(true);
     try {
-      this.users = await this.authService.listUsers();
-      this.filteredUsers = this.users;
-      this.cdr.markForCheck();
-    } catch (error: any) {
-      this.errorMessage = `Failed to load users: ${error.message || 'Unknown error'}`;
-      console.error('Error loading users:', error);
-      this.cdr.markForCheck();
+      const filter = this.searchQuery();
+      const cognitoUsers = await this.cognitoGroupService.listCognitoUsers(filter);
+      const users: User[] = Array.isArray(cognitoUsers) ? cognitoUsers.map((u: any) => ({
+        id: u.Username,
+        email: u.Attributes?.find((a: any) => a.Name === 'email')?.Value || u.Username,
+        name: u.Attributes?.find((a: any) => a.Name === 'name')?.Value || 'Unknown',
+        rate: 25.0,
+      })) : [];
+      this.filteredUsers.set(users);
+    } catch (err: any) {
+      this.errorMessage.set('Failed to search users: ' + err.message);
+      this.filteredUsers.set([]);
     } finally {
-      this.loading = false;
+      this.loading.set(false);
     }
   }
 
   async loadGroupMembers() {
-    this.loading = true;
+    this.loading.set(true);
     try {
-      this.groupMembers = await this.cognitoGroupService.listUsersInGroup(`chargecode-${this.data.chargeCodeName}`);
-      this.cdr.markForCheck();
-    } catch (error: any) {
-      this.errorMessage = `Failed to load group members: ${error.message || 'Unknown error'}`;
-      console.error('Error loading group members:', error);
-      this.cdr.markForCheck();
+      const members = await this.cognitoGroupService.listUsersInGroup(this.chargeCodeGroup());
+      this.groupMembers.set(Array.isArray(members) ? members : []);
+    } catch (err: any) {
+      this.errorMessage.set('Failed to load group members: ' + err.message);
+      this.groupMembers.set([]);
     } finally {
-      this.loading = false;
+      this.loading.set(false);
     }
   }
 
-  searchUsers() {
-    this.filteredUsers = this.users.filter(user =>
-      user.email.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
-      user.name.toLowerCase().includes(this.searchQuery.toLowerCase())
-    );
-    this.cdr.markForCheck();
-  }
-
   async save() {
-    this.loading = true;
-    this.errorMessage = null;
+    this.loading.set(true);
     try {
-      const selectedEmails = this.selectedUsers.value || [];
-      const groupName = `chargecode-${this.data.chargeCodeName}`;
-      for (const email of selectedEmails) {
-        if (!this.groupMembers.some(member => member.Username === email)) {
-          await this.cognitoGroupService.addUserToGroup(email, groupName);
-        }
+      const selected = this.selectedUsers.value || [];
+      for (const email of selected) {
+        await this.cognitoGroupService.addUserToGroup(email, this.chargeCodeGroup());
       }
       await this.loadGroupMembers();
-      this.dialogRef.close();
-    } catch (error: any) {
-      this.errorMessage = `Failed to add users to group: ${error.message || 'Unknown error'}`;
-      console.error('Error saving group members:', error);
-      this.cdr.markForCheck();
+      this.snackBar.open('Users added to charge code group', 'OK', { duration: 3000 });
+      this.selectedUsers.setValue([]);
+      this.searchQuery.set('');
+      this.filteredUsers.set([]);
+    } catch (err: any) {
+      this.errorMessage.set('Failed to save users: ' + err.message);
     } finally {
-      this.loading = false;
+      this.loading.set(false);
     }
   }
 
   async removeUser(email: string) {
-    this.loading = true;
-    this.errorMessage = null;
+    this.loading.set(true);
     try {
-      const groupName = `chargecode-${this.data.chargeCodeName}`;
-      await this.cognitoGroupService.removeUserFromGroup(email, groupName);
+      await this.cognitoGroupService.removeUserFromGroup(email, this.chargeCodeGroup());
       await this.loadGroupMembers();
-    } catch (error: any) {
-      this.errorMessage = `Failed to remove user: ${error.message || 'Unknown error'}`;
-      console.error('Error removing user:', error);
-      this.cdr.markForCheck();
+      this.snackBar.open('User removed from charge code group', 'OK', { duration: 3000 });
+    } catch (err: any) {
+      this.errorMessage.set('Failed to remove user: ' + err.message);
     } finally {
-      this.loading = false;
+      this.loading.set(false);
     }
   }
-} 
+}

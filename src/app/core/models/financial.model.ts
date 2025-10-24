@@ -12,12 +12,12 @@ export interface Account {
   id: string;
   accountNumber: string;
   name: string;
-  details: string | null; // Aligned with AccountModel
+  details: string | null;
   balance: number;
-  startingBalance: number | null; // Aligned with AccountModel
-  endingBalance: number | null; // Aligned with AccountModel
+  startingBalance: number | null;
+  endingBalance: number | null;
   date: string;
-  type: 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Expense' | null; // Aligned with AccountModel
+  type: 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Expense' | null;
   chargeCodes: Array<{
     name: string;
     cognitoGroup: string;
@@ -38,7 +38,7 @@ export interface Transaction {
   runningBalance: number;
 }
 
-// Schema models for type safety
+// Schema models for DynamoDB tables
 export interface AccountModel {
   id: string;
   accountNumber: string;

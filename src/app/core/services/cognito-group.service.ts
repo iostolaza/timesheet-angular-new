@@ -3,54 +3,67 @@ import { Amplify } from 'aws-amplify';
 import { get, post, put, del } from '@aws-amplify/api';
 import outputs from '../../../../amplify_outputs.json';
 
+interface RestApiConfig {
+  endpoint: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class CognitoGroupService {
   private userPoolId: string = outputs.auth?.user_pool_id ?? 'us-west-1_KfNSgZaRI';
-  private apiName: string = 'CognitoGroupAPI';
+  private apiName: string;
 
   constructor() {
     Amplify.configure(outputs);
+    // Dynamically get first (or only) REST API name from outputs.data.api
+    const apis = (outputs as any).data?.api;
+    this.apiName = apis ? Object.keys(apis)[0] : 'CognitoGroupAPI';
+    // Validate config exists
+    if (!apis?.[this.apiName]?.endpoint || (apis?.[this.apiName]?.endpoint as string) === 'YOUR_API_GATEWAY_URL') {
+      console.warn(`Warning: ${this.apiName} endpoint not deployed. Run 'npx amplify push' to fix.`);
+    }
   }
 
   private async callApi(
     method: 'get' | 'post' | 'put' | 'del',
     args: { path: string; body?: any; queryParams?: Record<string, any> }
-  ) {
+  ): Promise<any> {
     const { path, body, queryParams } = args;
-    const request = { apiName: this.apiName, path, options: { body, queryParams } };
-    if (method === 'post') return post(request);
-    if (method === 'put') return put(request);
-    if (method === 'del') return del(request);
-    return get(request);
+    try {
+      const request = { apiName: this.apiName, path, options: { body, queryParams } };
+      let response: any;
+      if (method === 'post') response = await post(request).response;
+      else if (method === 'put') response = await put(request).response;
+      else if (method === 'del') response = await del(request).response;
+      else response = await get(request).response;
+      return this.extractBody(response);
+    } catch (err: any) {
+      console.error(`API ${method.toUpperCase()} ${path} failed:`, err);
+      throw new Error(`Cognito API call failed: ${err.message || err}`);
+    }
   }
 
   private extractBody(response: any): any {
-    // Amplify modular API returns { body, statusCode, headers }
     try {
-      if (!response) return {};
-      if (typeof response.body === 'string') return JSON.parse(response.body);
-      if (response.body) return response.body;
-      return response;
-    } catch {
-      return response;
+      if (!response?.body) return {};
+      return typeof response.body === 'string' ? JSON.parse(response.body) : response.body;
+    } catch (err) {
+      console.error('Failed to parse API response:', err);
+      return {};
     }
   }
 
   async createGroup(groupName: string): Promise<void> {
-    const res = await this.callApi('post', {
+    await this.callApi('post', {
       path: '/groups',
       body: { UserPoolId: this.userPoolId, GroupName: groupName },
     });
-    console.log('createGroup response:', this.extractBody(res));
   }
 
   async getGroup(groupName: string): Promise<any> {
-    const res = await this.callApi('get', {
+    const data = await this.callApi('get', {
       path: `/groups/${groupName}`,
       queryParams: { UserPoolId: this.userPoolId },
     });
-    const data = this.extractBody(res);
-    console.log('getGroup:', data.Group ?? data);
     return data.Group ?? data;
   }
 
@@ -69,13 +82,11 @@ export class CognitoGroupService {
   }
 
   async listGroups(): Promise<any[]> {
-    const res = await this.callApi('get', {
+    const data = await this.callApi('get', {
       path: '/groups',
       queryParams: { UserPoolId: this.userPoolId, Limit: 60 },
     });
-    const data = this.extractBody(res);
-    console.log('listGroups:', data.Groups ?? data);
-    return data.Groups ?? data ?? [];
+    return Array.isArray(data.Groups) ? data.Groups : data ?? [];
   }
 
   async addUserToGroup(email: string, groupName: string): Promise<void> {
@@ -93,17 +104,15 @@ export class CognitoGroupService {
   }
 
   async listUsersInGroup(groupName: string): Promise<any[]> {
-    const res = await this.callApi('get', {
+    const data = await this.callApi('get', {
       path: `/groups/${groupName}/users`,
       queryParams: { UserPoolId: this.userPoolId, Limit: 60 },
     });
-    const data = this.extractBody(res);
-    console.log('listUsersInGroup:', data.Users ?? data);
-    return data.Users ?? data ?? [];
+    return Array.isArray(data.Users) ? data.Users : data ?? [];
   }
 
   async listCognitoUsers(filter?: string): Promise<any[]> {
-    const res = await this.callApi('get', {
+    const data = await this.callApi('get', {
       path: '/users',
       queryParams: {
         UserPoolId: this.userPoolId,
@@ -111,8 +120,6 @@ export class CognitoGroupService {
         Filter: filter ? `email ^= "${filter}"` : undefined,
       },
     });
-    const data = this.extractBody(res);
-    console.log('listCognitoUsers:', data.Users ?? data);
-    return data.Users ?? data ?? [];
+    return Array.isArray(data.Users) ? data.Users : data ?? [];
   }
 }
