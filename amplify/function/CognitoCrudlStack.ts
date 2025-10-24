@@ -11,12 +11,7 @@ export class CognitoCrudlStack implements ConstructFactory<cdk.Stack & ResourceP
   readonly name = 'CognitoCrudlStack';
   resource!: cdk.Stack & ResourceProvider;
 
-  constructor(auth?: ConstructFactory<any>) {
-    // Store auth for potential use
-    this.auth = auth;
-  }
-
-  private auth?: ConstructFactory<any>;
+  constructor(private auth?: ConstructFactory<any>) {}
 
   getInstance(props: ConstructFactoryGetInstanceProps & { scope?: Construct } = {} as any): cdk.Stack & ResourceProvider {
     const maybeScope = (props as any).scope ?? (props as any).construct ?? undefined;
@@ -26,24 +21,27 @@ export class CognitoCrudlStack implements ConstructFactory<cdk.Stack & ResourceP
     this.resource = new cdk.Stack(scope, this.name, stackProps) as cdk.Stack & ResourceProvider;
     (this.resource as any).resources = (this.resource as any).resources ?? {};
 
-// Use auth's userPoolId if provided, else create a new User Pool
-const userPoolId = (this.auth as any)?.resources?.cognitoUserPool?.userPoolId;
-
-const userPool = userPoolId
-  ? cognito.UserPool.fromUserPoolId(this.resource, 'ImportedUserPool', userPoolId)
-  : new cognito.UserPool(this.resource, 'MyUserPool', {
-      userPoolName: 'my-app-pool',
-      selfSignUpEnabled: true,
-      signInAliases: { email: true },
-      autoVerify: { email: true },
-      passwordPolicy: {
-        minLength: 8,
-        requireLowercase: true,
-        requireUppercase: true,
-        requireDigits: true,
-        requireSymbols: true,
-      },
-    });
+    // Use auth's User Pool if provided and valid, else create a new one
+    let userPool: cognito.IUserPool;
+    if (this.auth && this.auth.getInstance(props).resources?.cognitoUserPool?.userPoolId) {
+      const userPoolId = this.auth.getInstance(props).resources.cognitoUserPool.userPoolId;
+      userPool = cdk.aws_cognito.UserPool.fromUserPoolId(this.resource, 'ImportedUserPool', userPoolId);
+    } else {
+      console.warn('No valid auth User Pool provided; creating a new User Pool');
+      userPool = new cognito.UserPool(this.resource, 'MyUserPool', {
+        userPoolName: 'my-app-pool',
+        selfSignUpEnabled: true,
+        signInAliases: { email: true },
+        autoVerify: { email: true },
+        passwordPolicy: {
+          minLength: 8,
+          requireLowercase: true,
+          requireUppercase: true,
+          requireDigits: true,
+          requireSymbols: true,
+        },
+      });
+    }
 
     const userPoolClient = new cognito.UserPoolClient(this.resource, 'AppClient', {
       userPool,
@@ -96,7 +94,7 @@ const userPool = userPoolId
     groupResource.addMethod('PUT', lambdaIntegration, { authorizer });
     groupResource.addMethod('DELETE', lambdaIntegration, { authorizer });
 
-    const groupUsersResource = groupsResource.addResource('{groupName}').addResource('users');
+    const groupUsersResource = groupResource.addResource('users');
     groupUsersResource.addMethod('GET', lambdaIntegration, { authorizer });
     groupUsersResource.addMethod('POST', lambdaIntegration, { authorizer });
 

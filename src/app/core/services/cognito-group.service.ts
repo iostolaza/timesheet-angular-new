@@ -1,125 +1,235 @@
+// file: src/app/core/services/cognito-group.service.ts
 import { Injectable } from '@angular/core';
 import { Amplify } from 'aws-amplify';
-import { get, post, put, del } from '@aws-amplify/api';
+import { fetchAuthSession, currentCredentials } from '@aws-amplify/core';
 import outputs from '../../../../amplify_outputs.json';
-
-interface RestApiConfig {
-  endpoint: string;
-}
+import {
+  CognitoIdentityProviderClient,
+  CreateGroupCommand,
+  ListGroupsCommand,
+  AdminAddUserToGroupCommand,
+  ListUsersInGroupCommand,
+  AdminRemoveUserFromGroupCommand,
+  DeleteGroupCommand,
+  ListUsersCommand,
+  ListUsersCommandOutput,
+} from '@aws-sdk/client-cognito-identity-provider';
 
 @Injectable({ providedIn: 'root' })
 export class CognitoGroupService {
   private userPoolId: string = outputs.auth?.user_pool_id ?? 'us-west-1_KfNSgZaRI';
-  private apiName: string;
+  // Use any type to bypass TS2339 until AP I is deployed
+  private apiEndpoint: string | undefined = (outputs as any).data?.api?.CognitoGroupAPI?.endpoint;
+  private cognitoClient: CognitoIdentityProviderClient;
 
   constructor() {
     Amplify.configure(outputs);
-    // Dynamically get first (or only) REST API name from outputs.data.api
-    const apis = (outputs as any).data?.api;
-    this.apiName = apis ? Object.keys(apis)[0] : 'CognitoGroupAPI';
-    // Validate config exists
-    if (!apis?.[this.apiName]?.endpoint || (apis?.[this.apiName]?.endpoint as string) === 'YOUR_API_GATEWAY_URL') {
-      console.warn(`Warning: ${this.apiName} endpoint not deployed. Run 'npx amplify push' to fix.`);
-    }
+
+    // Initialize Cognito client with credentials from Amplify Auth for sandbox
+    this.cognitoClient = new CognitoIdentityProviderClient({
+      region: outputs.auth?.aws_region || 'us-west-1',
+      credentials: currentCredentials,
+    });
   }
 
-  private async callApi(
-    method: 'get' | 'post' | 'put' | 'del',
-    args: { path: string; body?: any; queryParams?: Record<string, any> }
-  ): Promise<any> {
-    const { path, body, queryParams } = args;
-    try {
-      const request = { apiName: this.apiName, path, options: { body, queryParams } };
-      let response: any;
-      if (method === 'post') response = await post(request).response;
-      else if (method === 'put') response = await put(request).response;
-      else if (method === 'del') response = await del(request).response;
-      else response = await get(request).response;
-      return this.extractBody(response);
-    } catch (err: any) {
-      console.error(`API ${method.toUpperCase()} ${path} failed:`, err);
-      throw new Error(`Cognito API call failed: ${err.message || err}`);
+  private async getAuthHeaders(): Promise<{ Authorization: string }> {
+    const session = await fetchAuthSession();
+    const idToken = session.tokens?.idToken?.toString();
+    if (!idToken) {
+      throw new Error('No ID token available');
     }
+    return { Authorization: idToken };
   }
 
-  private extractBody(response: any): any {
+  async debugCredentials() {
     try {
-      if (!response?.body) return {};
-      return typeof response.body === 'string' ? JSON.parse(response.body) : response.body;
+      const creds = await currentCredentials();
+      console.log('Credentials:', JSON.stringify(creds, null, 2));
+      return creds;
     } catch (err) {
-      console.error('Failed to parse API response:', err);
-      return {};
+      console.error('Failed to get credentials:', err);
+      throw err;
     }
   }
 
   async createGroup(groupName: string): Promise<void> {
-    await this.callApi('post', {
-      path: '/groups',
-      body: { UserPoolId: this.userPoolId, GroupName: groupName },
-    });
-  }
-
-  async getGroup(groupName: string): Promise<any> {
-    const data = await this.callApi('get', {
-      path: `/groups/${groupName}`,
-      queryParams: { UserPoolId: this.userPoolId },
-    });
-    return data.Group ?? data;
-  }
-
-  async updateGroup(groupName: string, description?: string): Promise<void> {
-    await this.callApi('put', {
-      path: `/groups/${groupName}`,
-      body: { UserPoolId: this.userPoolId, Description: description },
-    });
-  }
-
-  async deleteGroup(groupName: string): Promise<void> {
-    await this.callApi('del', {
-      path: `/groups/${groupName}`,
-      queryParams: { UserPoolId: this.userPoolId },
-    });
+    try {
+      if (this.apiEndpoint) {
+        // Use API Gateway in production
+        const headers = await this.getAuthHeaders();
+        const response = await fetch(`${this.apiEndpoint}/groups`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...headers },
+          body: JSON.stringify({ GroupName: groupName, UserPoolId: this.userPoolId }),
+        });
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.statusText}`);
+        }
+        console.log('Group created via API:', groupName);
+      } else {
+        // Fallback to direct SDK call in sandbox
+        const command = new CreateGroupCommand({
+          GroupName: groupName,
+          UserPoolId: this.userPoolId,
+        });
+        await this.cognitoClient.send(command);
+        console.log('Group created via SDK:', groupName);
+      }
+    } catch (err: any) {
+      console.error('Failed to create group:', JSON.stringify(err, null, 2));
+      throw new Error(`Failed to create group: ${err.message}`);
+    }
   }
 
   async listGroups(): Promise<any[]> {
-    const data = await this.callApi('get', {
-      path: '/groups',
-      queryParams: { UserPoolId: this.userPoolId, Limit: 60 },
-    });
-    return Array.isArray(data.Groups) ? data.Groups : data ?? [];
+    try {
+      if (this.apiEndpoint) {
+        const headers = await this.getAuthHeaders();
+        const response = await fetch(`${this.apiEndpoint}/groups`, {
+          method: 'GET',
+          headers,
+        });
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.statusText}`);
+        }
+        const result = await response.json();
+        return result.Groups || [];
+      } else {
+        const command = new ListGroupsCommand({
+          UserPoolId: this.userPoolId,
+          Limit: 60,
+        });
+        const result = await this.cognitoClient.send(command);
+        return result.Groups || [];
+      }
+    } catch (err: any) {
+      console.error('Failed to list groups:', err);
+      return [];
+    }
   }
 
   async addUserToGroup(email: string, groupName: string): Promise<void> {
-    await this.callApi('post', {
-      path: `/groups/${groupName}/users`,
-      body: { UserPoolId: this.userPoolId, Username: email },
-    });
-  }
-
-  async removeUserFromGroup(email: string, groupName: string): Promise<void> {
-    await this.callApi('del', {
-      path: `/groups/${groupName}/users/${email}`,
-      queryParams: { UserPoolId: this.userPoolId },
-    });
+    try {
+      if (this.apiEndpoint) {
+        const headers = await this.getAuthHeaders();
+        const response = await fetch(`${this.apiEndpoint}/groups/${groupName}/users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...headers },
+          body: JSON.stringify({ Username: email, UserPoolId: this.userPoolId }),
+        });
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.statusText}`);
+        }
+        console.log('User added to group via API:', email, groupName);
+      } else {
+        const command = new AdminAddUserToGroupCommand({
+          Username: email,
+          GroupName: groupName,
+          UserPoolId: this.userPoolId,
+        });
+        await this.cognitoClient.send(command);
+        console.log('User added to group via SDK:', email, groupName);
+      }
+    } catch (err: any) {
+      console.error('Failed to add user to group:', err);
+      throw new Error(`Failed to add user to group: ${err.message}`);
+    }
   }
 
   async listUsersInGroup(groupName: string): Promise<any[]> {
-    const data = await this.callApi('get', {
-      path: `/groups/${groupName}/users`,
-      queryParams: { UserPoolId: this.userPoolId, Limit: 60 },
-    });
-    return Array.isArray(data.Users) ? data.Users : data ?? [];
+    try {
+      if (this.apiEndpoint) {
+        const headers = await this.getAuthHeaders();
+        const response = await fetch(`${this.apiEndpoint}/groups/${groupName}/users`, {
+          method: 'GET',
+          headers,
+        });
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.statusText}`);
+        }
+        const result = await response.json();
+        return result.Users || [];
+      } else {
+        const command = new ListUsersInGroupCommand({
+          GroupName: groupName,
+          UserPoolId: this.userPoolId,
+          Limit: 60,
+        });
+        const result = await this.cognitoClient.send(command);
+        return result.Users || [];
+      }
+    } catch (err: any) {
+      console.error('Failed to list users in group:', err);
+      return [];
+    }
+  }
+
+  async removeUserFromGroup(email: string, groupName: string): Promise<void> {
+    try {
+      if (this.apiEndpoint) {
+        const headers = await this.getAuthHeaders();
+        const response = await fetch(`${this.apiEndpoint}/groups/${groupName}/users/${email}`, {
+          method: 'DELETE',
+          headers,
+        });
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.statusText}`);
+        }
+        console.log('User removed from group via API:', email, groupName);
+      } else {
+        const command = new AdminRemoveUserFromGroupCommand({
+          Username: email,
+          GroupName: groupName,
+          UserPoolId: this.userPoolId,
+        });
+        await this.cognitoClient.send(command);
+        console.log('User removed from group via SDK:', email, groupName);
+      }
+    } catch (err: any) {
+      console.error('Failed to remove user from group:', err);
+      throw new Error(`Failed to remove user from group: ${err.message}`);
+    }
+  }
+
+  async deleteGroup(groupName: string): Promise<void> {
+    try {
+      if (this.apiEndpoint) {
+        const headers = await this.getAuthHeaders();
+        const response = await fetch(`${this.apiEndpoint}/groups/${groupName}`, {
+          method: 'DELETE',
+          headers,
+        });
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.statusText}`);
+        }
+        console.log('Group deleted via API:', groupName);
+      } else {
+        const command = new DeleteGroupCommand({
+          GroupName: groupName,
+          UserPoolId: this.userPoolId,
+        });
+        await this.cognitoClient.send(command);
+        console.log('Group deleted via SDK:', groupName);
+      }
+    } catch (err: any) {
+      console.error('Failed to delete group:', err);
+      throw new Error(`Failed to delete group: ${err.message}`);
+    }
   }
 
   async listCognitoUsers(filter?: string): Promise<any[]> {
-    const data = await this.callApi('get', {
-      path: '/users',
-      queryParams: {
+    try {
+      const params = {
         UserPoolId: this.userPoolId,
         Limit: 60,
         Filter: filter ? `email ^= "${filter}"` : undefined,
-      },
-    });
-    return Array.isArray(data.Users) ? data.Users : data ?? [];
+      };
+      const command = new ListUsersCommand(params);
+      const result = await this.cognitoClient.send(command);
+      return result.Users || [];
+    } catch (err: any) {
+      console.error('Failed to list Cognito users:', err);
+      return [];
+    }
   }
 }
