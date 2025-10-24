@@ -1,7 +1,7 @@
 // file: src/app/core/services/cognito-group.service.ts
 import { Injectable } from '@angular/core';
 import { Amplify } from 'aws-amplify';
-import { fetchAuthSession, currentCredentials } from '@aws-amplify/core';
+import { fetchAuthSession, getCurrentCredentials } from '@aws-amplify/core';
 import outputs from '../../../../amplify_outputs.json';
 import {
   CognitoIdentityProviderClient,
@@ -18,8 +18,7 @@ import {
 @Injectable({ providedIn: 'root' })
 export class CognitoGroupService {
   private userPoolId: string = outputs.auth?.user_pool_id ?? 'us-west-1_KfNSgZaRI';
-  // Use any type to bypass TS2339 until AP I is deployed
-  private apiEndpoint: string | undefined = (outputs as any).data?.api?.CognitoGroupAPI?.endpoint;
+  private apiEndpoint: string | undefined = outputs.data?.api?.CognitoGroupAPI?.endpoint;
   private cognitoClient: CognitoIdentityProviderClient;
 
   constructor() {
@@ -28,7 +27,7 @@ export class CognitoGroupService {
     // Initialize Cognito client with credentials from Amplify Auth for sandbox
     this.cognitoClient = new CognitoIdentityProviderClient({
       region: outputs.auth?.aws_region || 'us-west-1',
-      credentials: currentCredentials,
+      credentials: getCurrentCredentials,
     });
   }
 
@@ -43,7 +42,7 @@ export class CognitoGroupService {
 
   async debugCredentials() {
     try {
-      const creds = await currentCredentials();
+      const creds = await getCurrentCredentials();
       console.log('Credentials:', JSON.stringify(creds, null, 2));
       return creds;
     } catch (err) {
@@ -55,7 +54,6 @@ export class CognitoGroupService {
   async createGroup(groupName: string): Promise<void> {
     try {
       if (this.apiEndpoint) {
-        // Use API Gateway in production
         const headers = await this.getAuthHeaders();
         const response = await fetch(`${this.apiEndpoint}/groups`, {
           method: 'POST',
@@ -67,7 +65,6 @@ export class CognitoGroupService {
         }
         console.log('Group created via API:', groupName);
       } else {
-        // Fallback to direct SDK call in sandbox
         const command = new CreateGroupCommand({
           GroupName: groupName,
           UserPoolId: this.userPoolId,
@@ -232,4 +229,4 @@ export class CognitoGroupService {
       return [];
     }
   }
-}
+} 
