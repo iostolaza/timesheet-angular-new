@@ -1,6 +1,7 @@
 {
   "name": "timesheet-app-new",
   "version": "0.0.0",
+  "private": true,
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
@@ -18,7 +19,6 @@
       }
     ]
   },
-  "private": true,
   "dependencies": {
     "@angular/animations": "^20.3.6",
     "@angular/cdk": "^20.2.9",
@@ -56,6 +56,7 @@
     "@angular/compiler-cli": "^20.1.0",
     "@aws-amplify/backend": "^1.16.1",
     "@aws-amplify/backend-cli": "^1.8.0",
+    "@aws-amplify/cli": "^12.10.1",
     "@types/jasmine": "~5.1.0",
     "@types/jest": "30.0.0",
     "@types/uuid": "^9.0.8",
