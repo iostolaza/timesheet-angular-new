@@ -1,7 +1,6 @@
-// file: src/app/core/services/cognito-group.service.ts
 import { Injectable } from '@angular/core';
 import { Amplify } from 'aws-amplify';
-import { fetchAuthSession, getCurrentCredentials } from '@aws-amplify/core';
+import { fetchAuthSession } from 'aws-amplify/auth';
 import outputs from '../../../../amplify_outputs.json';
 import {
   CognitoIdentityProviderClient,
@@ -12,23 +11,45 @@ import {
   AdminRemoveUserFromGroupCommand,
   DeleteGroupCommand,
   ListUsersCommand,
-  ListUsersCommandOutput,
 } from '@aws-sdk/client-cognito-identity-provider';
 
 @Injectable({ providedIn: 'root' })
 export class CognitoGroupService {
   private userPoolId: string = outputs.auth?.user_pool_id ?? 'us-west-1_KfNSgZaRI';
   private apiEndpoint: string | undefined = outputs.data?.api?.CognitoGroupAPI?.endpoint;
-  private cognitoClient: CognitoIdentityProviderClient;
+  private cognitoClient: CognitoIdentityProviderClient | undefined;
 
   constructor() {
     Amplify.configure(outputs);
+    // Initialize Cognito client asynchronously
+    this.initializeCognitoClient();
+  }
 
-    // Initialize Cognito client with credentials from Amplify Auth for sandbox
-    this.cognitoClient = new CognitoIdentityProviderClient({
-      region: outputs.auth?.aws_region || 'us-west-1',
-      credentials: getCurrentCredentials,
-    });
+  private async initializeCognitoClient() {
+    try {
+      const session = await fetchAuthSession();
+      const credentials = session.credentials;
+      if (!credentials) {
+        throw new Error('No credentials available');
+      }
+      this.cognitoClient = new CognitoIdentityProviderClient({
+        region: outputs.auth?.aws_region || 'us-west-1',
+        credentials: credentials,
+      });
+    } catch (err) {
+      console.error('Failed to initialize Cognito client:', err);
+      throw err;
+    }
+  }
+
+  private async ensureCognitoClient() {
+    if (!this.cognitoClient) {
+      await this.initializeCognitoClient();
+    }
+    if (!this.cognitoClient) {
+      throw new Error('Cognito client not initialized');
+    }
+    return this.cognitoClient;
   }
 
   private async getAuthHeaders(): Promise<{ Authorization: string }> {
@@ -42,7 +63,8 @@ export class CognitoGroupService {
 
   async debugCredentials() {
     try {
-      const creds = await getCurrentCredentials();
+      const session = await fetchAuthSession();
+      const creds = session.credentials;
       console.log('Credentials:', JSON.stringify(creds, null, 2));
       return creds;
     } catch (err) {
@@ -65,11 +87,12 @@ export class CognitoGroupService {
         }
         console.log('Group created via API:', groupName);
       } else {
+        const client = await this.ensureCognitoClient();
         const command = new CreateGroupCommand({
           GroupName: groupName,
           UserPoolId: this.userPoolId,
         });
-        await this.cognitoClient.send(command);
+        await client.send(command);
         console.log('Group created via SDK:', groupName);
       }
     } catch (err: any) {
@@ -92,11 +115,12 @@ export class CognitoGroupService {
         const result = await response.json();
         return result.Groups || [];
       } else {
+        const client = await this.ensureCognitoClient();
         const command = new ListGroupsCommand({
           UserPoolId: this.userPoolId,
           Limit: 60,
         });
-        const result = await this.cognitoClient.send(command);
+        const result = await client.send(command);
         return result.Groups || [];
       }
     } catch (err: any) {
@@ -119,12 +143,13 @@ export class CognitoGroupService {
         }
         console.log('User added to group via API:', email, groupName);
       } else {
+        const client = await this.ensureCognitoClient();
         const command = new AdminAddUserToGroupCommand({
           Username: email,
           GroupName: groupName,
           UserPoolId: this.userPoolId,
         });
-        await this.cognitoClient.send(command);
+        await client.send(command);
         console.log('User added to group via SDK:', email, groupName);
       }
     } catch (err: any) {
@@ -147,12 +172,13 @@ export class CognitoGroupService {
         const result = await response.json();
         return result.Users || [];
       } else {
+        const client = await this.ensureCognitoClient();
         const command = new ListUsersInGroupCommand({
           GroupName: groupName,
           UserPoolId: this.userPoolId,
           Limit: 60,
         });
-        const result = await this.cognitoClient.send(command);
+        const result = await client.send(command);
         return result.Users || [];
       }
     } catch (err: any) {
@@ -174,12 +200,13 @@ export class CognitoGroupService {
         }
         console.log('User removed from group via API:', email, groupName);
       } else {
+        const client = await this.ensureCognitoClient();
         const command = new AdminRemoveUserFromGroupCommand({
           Username: email,
           GroupName: groupName,
           UserPoolId: this.userPoolId,
         });
-        await this.cognitoClient.send(command);
+        await client.send(command);
         console.log('User removed from group via SDK:', email, groupName);
       }
     } catch (err: any) {
@@ -201,11 +228,12 @@ export class CognitoGroupService {
         }
         console.log('Group deleted via API:', groupName);
       } else {
+        const client = await this.ensureCognitoClient();
         const command = new DeleteGroupCommand({
           GroupName: groupName,
           UserPoolId: this.userPoolId,
         });
-        await this.cognitoClient.send(command);
+        await client.send(command);
         console.log('Group deleted via SDK:', groupName);
       }
     } catch (err: any) {
@@ -216,17 +244,18 @@ export class CognitoGroupService {
 
   async listCognitoUsers(filter?: string): Promise<any[]> {
     try {
+      const client = await this.ensureCognitoClient();
       const params = {
         UserPoolId: this.userPoolId,
         Limit: 60,
         Filter: filter ? `email ^= "${filter}"` : undefined,
       };
       const command = new ListUsersCommand(params);
-      const result = await this.cognitoClient.send(command);
+      const result = await client.send(command);
       return result.Users || [];
     } catch (err: any) {
       console.error('Failed to list Cognito users:', err);
       return [];
     }
   }
-} 
+}
