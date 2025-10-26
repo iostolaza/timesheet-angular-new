@@ -21,7 +21,7 @@ const schema = a.schema({
       allow.owner().to(['read', 'update', 'delete']),
       allow.authenticated().to(['create', 'read']),
     ]),
-    
+
   Account: a
     .model({
       id: a.id().required(),
@@ -37,7 +37,7 @@ const schema = a.schema({
       transactions: a.hasMany('Transaction', 'accountId'),
     })
     .authorization(allow => [
-      allow.authenticated().to(['create', 'read', 'update','delete']),
+      allow.authenticated().to(['create', 'read', 'update', 'delete']),
     ]),
 
   Transaction: a
@@ -54,10 +54,9 @@ const schema = a.schema({
       runningBalance: a.float().required(),
     })
     .authorization(allow => [
-      allow.authenticated().to(['create', 'read', 'update','delete']),
+      allow.authenticated().to(['create', 'read', 'update', 'delete']),
     ]),
 
-  // ADD TIMESHEET MODELS
   Timesheet: a
     .model({
       id: a.id().required(),
@@ -82,7 +81,7 @@ const schema = a.schema({
       endTime: a.string().required(),
       hours: a.float().required(),
       description: a.string().required(),
-      chargeCode: a.string().required(),
+      chargeCode: a.string(),
       owner: a.string().required(),
       timesheet: a.belongsTo('Timesheet', 'timesheetId'),
     })

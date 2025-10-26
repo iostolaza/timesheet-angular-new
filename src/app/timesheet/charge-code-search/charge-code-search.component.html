@@ -1,0 +1,17 @@
+<!-- src/app/timesheet/charge-code-search/charge-code-search.component.html -->
+
+    <div class="dialog p-6">
+      <h2 mat-dialog-title class="text-2xl font-bold mb-4">Search Charge Code</h2>
+      <mat-form-field class="form-field">
+        <mat-label>Charge Code</mat-label>
+        <input matInput [formControl]="searchControl" [matAutocomplete]="auto">
+        <mat-autocomplete #auto="matAutocomplete" [displayWith]="displayFn" (optionSelected)="onSelect($event.option.value)">
+          <mat-option value="">None</mat-option>
+          <mat-option *ngFor="let code of filteredCodes | async" [value]="code">{{ code.name }}</mat-option>
+        </mat-autocomplete>
+      </mat-form-field>
+      <div class="flex justify-end mt-4">
+        <button mat-button (click)="onCancel()">Cancel</button>
+        <button mat-raised-button color="primary" class="ml-2" (click)="onConfirm()" [disabled]="!selectedCode">Confirm</button>
+      </div>
+    </div>

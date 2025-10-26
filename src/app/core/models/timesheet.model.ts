@@ -1,3 +1,4 @@
+
 // src/app/core/models/timesheet.model.ts
 
 export interface Timesheet {
@@ -18,6 +19,6 @@ export interface TimesheetEntry {
   endTime: string;
   hours: number;
   description: string;
-  chargeCode: string;
+  chargeCode?: string;
   owner: string;
 }

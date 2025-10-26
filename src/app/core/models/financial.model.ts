@@ -1,4 +1,6 @@
-// file: src/app/core/models/financial.model.ts
+
+//src/app/core/models/financial.model.ts
+
 export interface User {
   id: string;
   email: string;
@@ -6,6 +8,12 @@ export interface User {
   role?: 'Employee' | 'Manager' | 'Admin' | null;
   rate: number;
   groups?: string[] | null;
+}
+
+export interface ChargeCode {
+  name: string;
+  createdBy: string;
+  date: string;
 }
 
 export interface Account {
@@ -18,12 +26,7 @@ export interface Account {
   endingBalance: number | null;
   date: string;
   type: 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Expense' | null;
-  chargeCodes: Array<{
-    name: string;
-    cognitoGroup: string;
-    createdBy: string;
-    date: string;
-  }>;
+  chargeCodes: ChargeCode[];
 }
 
 export interface Transaction {
@@ -38,7 +41,6 @@ export interface Transaction {
   runningBalance: number;
 }
 
-// Schema models for DynamoDB tables
 export interface AccountModel {
   id: string;
   accountNumber: string;

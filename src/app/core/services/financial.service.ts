@@ -1,24 +1,23 @@
+
 // src/app/core/services/financial.service.ts
-import { Injectable } from '@angular/core';
+
+import { Injectable, inject } from '@angular/core';
 import { generateClient } from 'aws-amplify/data';
 import { firstValueFrom } from 'rxjs';
 import { v4 as uuidv4 } from 'uuid';
 import type { Schema } from '../../../../amplify/data/resource';
-import { Account, Transaction, AccountModel, TransactionModel, User } from '../models/financial.model';
+import { Account, Transaction, AccountModel, TransactionModel, User, ChargeCode } from '../models/financial.model';
 import { AuthService } from './auth.service';
 import { CognitoGroupService } from './cognito-group.service';
 
 @Injectable({ providedIn: 'root' })
 export class FinancialService {
   private client = generateClient<Schema>();
-
-  constructor(
-    private authService: AuthService,
-    private cognitoGroupService: CognitoGroupService
-  ) {}
+  private authService = inject(AuthService);
+  private cognitoGroupService = inject(CognitoGroupService);
 
   private mapAccountFromSchema(data: AccountModel): Account {
-    let chargeCodes: Account['chargeCodes'] = [];
+    let chargeCodes: ChargeCode[] = [];
     if (data.chargeCodesJson) {
       try {
         chargeCodes = JSON.parse(data.chargeCodesJson);
@@ -195,7 +194,7 @@ export class FinancialService {
     return `${short}-${mid}-${rand}`;
   }
 
-  async createChargeCode(account: Account): Promise<Account['chargeCodes'][number]> {
+  async createChargeCode(account: Account): Promise<ChargeCode> {
     if (!account.accountNumber) {
       console.error('Invalid account number for charge code creation:', account);
       throw new Error('Account number is required for charge code creation');
@@ -207,7 +206,6 @@ export class FinancialService {
 
     const chargeCode = {
       name,
-      cognitoGroup: `chargecode-${name}`,
       createdBy,
       date: new Date().toISOString(),
     };
@@ -215,22 +213,21 @@ export class FinancialService {
     const updatedChargeCodes = [...(account.chargeCodes ?? []), chargeCode];
 
     try {
-      await this.cognitoGroupService.createGroup(chargeCode.cognitoGroup);
       await this.updateAccount(account.id, {
         accountNumber: account.accountNumber,
         balance: account.balance,
         endingBalance: account.endingBalance,
         chargeCodes: updatedChargeCodes,
       });
-      console.log('Charge code and group created:', chargeCode);
+      console.log('Charge code created:', chargeCode);
       return chargeCode;
     } catch (error: any) {
-      console.error('Failed to create charge code or group:', error);
+      console.error('Failed to create charge code:', error);
       throw new Error(`Failed to create charge code: ${error.message || error}`);
     }
   }
 
-  async listChargeCodes(accountId: string): Promise<Account['chargeCodes']> {
+  async listChargeCodes(accountId: string): Promise<ChargeCode[]> {
     const account = await this.getAccount(accountId);
     return account.chargeCodes ?? [];
   }

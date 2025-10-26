@@ -1,5 +1,4 @@
 
-
 // src/app/timesheet/calendar-view/day-entry-dialog.component.ts
 
 import { Component, Inject } from '@angular/core';
@@ -10,14 +9,8 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
 import { CommonModule } from '@angular/common';
-import { TimesheetEntry } from '../../core/models/timesheet.model';
-
-export interface ChargeCode {
-  id: string;
-  name: string;
-  linkedAccount: string;
-  active: boolean;
-}
+import { TimesheetEntry, } from '../../core/models/timesheet.model';
+import { ChargeCode } from '../../core/models/financial.model';
 
 interface DialogData {
   entry: TimesheetEntry;
@@ -47,7 +40,7 @@ export class DayEntryDialogComponent {
     private fb: FormBuilder
   ) {
     this.form = this.fb.group({
-      chargeCode: [this.data.entry.chargeCode || '', [Validators.required]],
+      chargeCode: [this.data.entry.chargeCode || ''],
       description: [this.data.entry.description || '', [Validators.required]],
     });
   }
