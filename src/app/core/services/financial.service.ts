@@ -8,13 +8,11 @@ import { v4 as uuidv4 } from 'uuid';
 import type { Schema } from '../../../../amplify/data/resource';
 import { Account, Transaction, AccountModel, TransactionModel, User, ChargeCode } from '../models/financial.model';
 import { AuthService } from './auth.service';
-import { CognitoGroupService } from './cognito-group.service';
 
 @Injectable({ providedIn: 'root' })
 export class FinancialService {
   private client = generateClient<Schema>();
   private authService = inject(AuthService);
-  private cognitoGroupService = inject(CognitoGroupService);
 
   private mapAccountFromSchema(data: AccountModel): Account {
     let chargeCodes: ChargeCode[] = [];
@@ -72,7 +70,7 @@ export class FinancialService {
       chargeCodesJson: JSON.stringify(account.chargeCodes ?? []),
     };
 
-    const { data, errors } = await this.client.models.Account.create(input, { authMode: 'userPool' });
+    const { data, errors } = await this.client.models.Account.create(input);
     if (errors?.length) {
       throw new Error(`Failed to create account: ${errors.map((e: any) => e.message).join(', ')}`);
     }
@@ -83,7 +81,7 @@ export class FinancialService {
   }
 
   async getAccount(id: string): Promise<Account> {
-    const { data, errors } = await this.client.models.Account.get({ id }, { authMode: 'userPool' });
+    const { data, errors } = await this.client.models.Account.get({ id });
     if (errors?.length) {
       throw new Error(`Failed to get account: ${errors.map(e => e.message).join(', ')}`);
     }
@@ -96,7 +94,6 @@ export class FinancialService {
   async getAccountByNumber(accountNumber: string): Promise<Account | null> {
     const { data, errors } = await this.client.models.Account.list({
       filter: { accountNumber: { eq: accountNumber } },
-      authMode: 'userPool'
     });
     if (errors?.length) {
       throw new Error(`Failed to get account: ${errors.map(e => e.message).join(', ')}`);
@@ -106,7 +103,7 @@ export class FinancialService {
   }
 
   async listAccounts(): Promise<Account[]> {
-    const { data, errors } = await this.client.models.Account.list({ limit: 100, authMode: 'userPool' });
+    const { data, errors } = await this.client.models.Account.list({ limit: 100 });
     if (errors?.length) {
       throw new Error(`Failed to list accounts: ${errors.map(e => e.message).join(', ')}`);
     }
@@ -133,7 +130,7 @@ export class FinancialService {
       chargeCodesJson: updates.chargeCodes ? JSON.stringify(updates.chargeCodes) : JSON.stringify(currentAccount.chargeCodes ?? []),
     };
 
-    const { data, errors } = await this.client.models.Account.update(input, { authMode: 'userPool' });
+    const { data, errors } = await this.client.models.Account.update(input);
     if (errors?.length) {
       throw new Error(`Failed to update account: ${errors.map(e => e.message).join(', ')}`);
     }
@@ -144,7 +141,7 @@ export class FinancialService {
   }
 
   async deleteAccount(id: string): Promise<void> {
-    const { errors } = await this.client.models.Account.delete({ id }, { authMode: 'userPool' });
+    const { errors } = await this.client.models.Account.delete({ id });
     if (errors?.length) {
       throw new Error(`Failed to delete account: ${errors.map(e => e.message).join(', ')}`);
     }
@@ -166,7 +163,7 @@ export class FinancialService {
       runningBalance,
     };
 
-    const { data, errors } = await this.client.models.Transaction.create(input, { authMode: 'userPool' });
+    const { data, errors } = await this.client.models.Transaction.create(input);
     if (errors?.length) {
       throw new Error(`Failed to create transaction: ${errors.map(e => e.message).join(', ')}`);
     }
@@ -179,7 +176,7 @@ export class FinancialService {
 
   async listTransactions(filter?: { accountId?: string }): Promise<Transaction[]> {
     const gqlFilter = filter?.accountId ? { accountId: { eq: filter.accountId } } : undefined;
-    const { data, errors } = await this.client.models.Transaction.list({ filter: gqlFilter, limit: 200, authMode: 'userPool' });
+    const { data, errors } = await this.client.models.Transaction.list({ filter: gqlFilter, limit: 200 });
     if (errors?.length) {
       throw new Error(`Failed to list transactions: ${errors.map(e => e.message).join(', ')}`);
     }
@@ -234,7 +231,7 @@ export class FinancialService {
 
   async listUsers(): Promise<User[]> {
     try {
-      const { data, errors } = await this.client.models.User.list({ authMode: 'userPool' });
+      const { data, errors } = await this.client.models.User.list();
       if (errors?.length) {
         throw new Error(`Failed to list users: ${errors.map(e => e.message).join(', ')}`);
       }
@@ -250,13 +247,13 @@ export class FinancialService {
       await this.getUserById(user.id);
       console.log('User already exists:', user.id);
     } catch (err) {
-      const { data } = await this.client.models.User.create(user, { authMode: 'userPool' });
+      const { data } = await this.client.models.User.create(user);
       console.log('Created new User:', data);
     }
   }
 
   async getUserById(id: string): Promise<User> {
-    const { data } = await this.client.models.User.get({ id }, { authMode: 'userPool' });
+    const { data } = await this.client.models.User.get({ id });
     if (!data) throw new Error(`User with id ${id} not found`);
     return data as User;
   }

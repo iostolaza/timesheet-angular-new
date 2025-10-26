@@ -1,5 +1,5 @@
 
-// file: src/app/core/services/timesheet.service.ts
+//src/app/core/services/timesheet.service.ts
 
 import { Injectable, inject } from '@angular/core';
 import { generateClient } from 'aws-amplify/data';
@@ -82,7 +82,10 @@ export class TimesheetService {
 
   async addEntry(entry: Omit<TimesheetEntry, 'id' | 'timesheetId'>, timesheetId: string): Promise<TimesheetEntry> {
     const sub = await firstValueFrom(this.authService.getUserSub());
-    const fullEntry = { ...entry, owner: sub!, timesheetId, chargeCode: entry.chargeCode || 'Unassigned' };
+    if (!entry.chargeCode) {
+      throw new Error('Charge code is required');
+    }
+    const fullEntry = { ...entry, owner: sub!, timesheetId };
     console.log('Adding timesheet entry', { timesheetId, date: fullEntry.date });
 
     const { data: existing, errors: existingErrors } = await this.client.models.TimesheetEntry.list({
@@ -176,10 +179,7 @@ export class TimesheetService {
       throw new Error('Weekly hours exceed 40');
     }
 
-    const { data, errors } = await this.client.models.TimesheetEntry.update({
-      ...entry,
-      chargeCode: entry.chargeCode || 'Unassigned',
-    });
+    const { data, errors } = await this.client.models.TimesheetEntry.update(entry);
     if (errors?.length) {
       console.error('Failed to update timesheet entry', errors);
       throw new Error(`Failed to update timesheet entry: ${errors.map(e => e.message).join(', ')}`);
@@ -203,46 +203,44 @@ export class TimesheetService {
     const user = await this.authService.getUserById(tsWithEntries.owner);
     let totalCost = 0;
     for (const entry of tsWithEntries.entries) {
-      if (entry.chargeCode && entry.chargeCode !== 'Unassigned') {
-        const account = await this.financialService.getAccountByNumber(entry.chargeCode);
-        if (!account) {
-          console.error('Account not found for charge code', { chargeCode: entry.chargeCode });
-          throw new Error(`Account not found for ${entry.chargeCode}`);
-        }
-        const amount = entry.hours * user.rate;
-        totalCost += amount;
-
-        const { data: txData, errors: txErrors } = await this.client.models.Transaction.create({
-          accountId: account.id,
-          amount,
-          debit: true,
-          date: new Date().toISOString().split('T')[0],
-          description: `Approved timesheet: ${entry.description}`,
-          runningBalance: account.balance - amount,
-        });
-        if (txErrors?.length) {
-          console.error('Failed to create transaction', txErrors);
-          throw new Error(`Failed to create transaction: ${txErrors.map(e => e.message).join(', ')}`);
-        }
-        if (!txData) {
-          console.error('No data returned from transaction creation');
-          throw new Error('No data returned from transaction creation');
-        }
-
-        const { data: accountData, errors: accountUpdateErrors } = await this.client.models.Account.update({
-          id: account.id,
-          balance: account.balance - amount,
-        });
-        if (accountUpdateErrors?.length) {
-          console.error('Failed to update account', accountUpdateErrors);
-          throw new Error(`Failed to update account: ${accountUpdateErrors.map(e => e.message).join(', ')}`);
-        }
-        if (!accountData) {
-          console.error('No data returned from account update');
-          throw new Error('No data returned from account update');
-        }
-        console.log('Created transaction and updated account', { transactionId: txData.id, accountId: account.id });
+      const account = await this.financialService.getAccountByNumber(entry.chargeCode); // chargeCode is guaranteed to be string
+      if (!account) {
+        console.error('Account not found for charge code', { chargeCode: entry.chargeCode });
+        throw new Error(`Account not found for ${entry.chargeCode}`);
       }
+      const amount = entry.hours * user.rate;
+      totalCost += amount;
+
+      const { data: txData, errors: txErrors } = await this.client.models.Transaction.create({
+        accountId: account.id,
+        amount,
+        debit: true,
+        date: new Date().toISOString().split('T')[0],
+        description: `Approved timesheet: ${entry.description}`,
+        runningBalance: account.balance - amount,
+      });
+      if (txErrors?.length) {
+        console.error('Failed to create transaction', txErrors);
+        throw new Error(`Failed to create transaction: ${txErrors.map(e => e.message).join(', ')}`);
+      }
+      if (!txData) {
+        console.error('No data returned from transaction creation');
+        throw new Error('No data returned from transaction creation');
+      }
+
+      const { data: accountData, errors: accountUpdateErrors } = await this.client.models.Account.update({
+        id: account.id,
+        balance: account.balance - amount,
+      });
+      if (accountUpdateErrors?.length) {
+        console.error('Failed to update account', accountUpdateErrors);
+        throw new Error(`Failed to update account: ${accountUpdateErrors.map(e => e.message).join(', ')}`);
+      }
+      if (!accountData) {
+        console.error('No data returned from account update');
+        throw new Error('No data returned from account update');
+      }
+      console.log('Created transaction and updated account', { transactionId: txData.id, accountId: account.id });
     }
 
     const { data, errors } = await this.client.models.Timesheet.update({
