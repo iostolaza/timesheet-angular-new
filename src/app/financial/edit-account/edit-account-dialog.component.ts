@@ -1,3 +1,6 @@
+
+// src/app/financial/edit-account/edit-account-dialog.component.ts
+
 import { Component, Inject, OnInit } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
@@ -6,8 +9,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { FinancialService } from '../../core/services/financial.service';
 import { AuthService } from '../../core/services/auth.service';
-import { CognitoGroupService } from '../../core/services/cognito-group.service'; // ✅ ADD THIS
-import { Account } from '../../core/models/financial.model';
+import { Account, ChargeCode } from '../../core/models/financial.model';
 import { ChargeCodeDialogComponent } from '../charge-code/charge-code-dialog.component';
 import { firstValueFrom } from 'rxjs';
 
@@ -29,18 +31,12 @@ export class EditAccountDialogComponent implements OnInit {
   errorMessage = '';
   loading = false;
   accountTypes = ['Asset', 'Liability', 'Equity', 'Revenue', 'Expense'];
-  chargeCodes: Array<{
-    name: string;
-    cognitoGroup: string;
-    createdBy: string;
-    date: string;
-  }> = [];
+  chargeCodes: ChargeCode[] = [];
 
   constructor(
     private fb: FormBuilder,
     private financialService: FinancialService,
     private authService: AuthService,
-    private cognitoGroupService: CognitoGroupService, // ✅ INJECTED HERE
     public dialogRef: MatDialogRef<EditAccountDialogComponent>,
     private dialog: MatDialog,
     @Inject(MAT_DIALOG_DATA) public data: { account: Account }
@@ -109,11 +105,6 @@ export class EditAccountDialogComponent implements OnInit {
     this.errorMessage = '';
 
     try {
-      const isAdmin = await this.authService.isAdmin();
-      if (!isAdmin) {
-        throw new Error('Admin access required to create charge codes');
-      }
-
       const newChargeCode = await this.financialService.createChargeCode(this.data.account);
       this.chargeCodes = [...this.chargeCodes, newChargeCode];
       await this.financialService.getAccount(this.data.account.id);
@@ -126,19 +117,13 @@ export class EditAccountDialogComponent implements OnInit {
     }
   }
 
-  async removeChargeCode(code: { name: string; cognitoGroup: string; createdBy: string; date: string }) {
+  async removeChargeCode(code: ChargeCode) {
     const confirmed = confirm(`Are you sure you want to remove charge code "${code.name}"?`);
     if (confirmed) {
       this.loading = true;
       this.errorMessage = '';
 
       try {
-        const isAdmin = await this.authService.isAdmin();
-        if (!isAdmin) {
-          throw new Error('Admin access required to remove charge codes');
-        }
-
-        // ✅ Update charge codes
         this.chargeCodes = this.chargeCodes.filter(c => c.name !== code.name);
         await this.financialService.updateAccount(this.data.account.id, {
           accountNumber: this.data.account.accountNumber,
@@ -146,10 +131,6 @@ export class EditAccountDialogComponent implements OnInit {
           endingBalance: this.data.account.endingBalance,
           chargeCodes: this.chargeCodes,
         });
-
-        // ✅ Delete the Cognito group directly using the injected service
-        await this.cognitoGroupService.deleteGroup(code.cognitoGroup);
-
       } catch (error: any) {
         this.errorMessage = error.message || 'Failed to remove charge code';
         console.error('Error removing charge code:', error);
@@ -160,7 +141,7 @@ export class EditAccountDialogComponent implements OnInit {
     }
   }
 
-  openChargeCodeDialog(chargeCode: { name: string; cognitoGroup: string; createdBy: string; date: string }) {
+  openChargeCodeDialog(chargeCode: ChargeCode) {
     this.dialog.open(ChargeCodeDialogComponent, {
       width: '600px',
       data: {

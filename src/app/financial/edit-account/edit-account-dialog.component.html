@@ -97,7 +97,6 @@
       <div *ngFor="let code of chargeCodes" class="py-3 flex items-center justify-between">
         <div class="flex-1">
           <p class="text-gray-800 font-medium">{{ code.name }}</p>
-          <p class="text-gray-500 text-xs">Group: {{ code.cognitoGroup }}</p>
           <p class="text-gray-400 text-xs">Created: {{ code.date | date:'short' }}</p>
         </div>
         <div class="flex gap-2">
@@ -107,7 +106,6 @@
             aria-label="Manage users for charge code"
             title="Manage Users"
           >
-            <mat-icon>group</mat-icon>
           </button>
           <button
             class="text-red-500 hover:text-red-700 p-2"
