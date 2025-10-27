@@ -58,7 +58,7 @@ export class EditUserProfileComponent implements OnInit {
         name: [this.currentUser.name, [Validators.required, Validators.minLength(2)]],
         role: [this.currentUser.role, Validators.required],
         rate: [this.currentUser.rate, [Validators.required, Validators.min(0)]],
-        groups: [this.currentUser.groups || []]
+    
       });
     } catch (error) {
       this.errorMessage = 'Failed to load user profile';
@@ -85,7 +85,7 @@ export class EditUserProfileComponent implements OnInit {
         name: formValue.name,
         role: formValue.role,
         rate: formValue.rate,
-        groups: formValue.groups || [],
+
       };
 
       const result = await this.authService.updateUser(this.currentUser.id, updates);
@@ -100,24 +100,6 @@ export class EditUserProfileComponent implements OnInit {
     } finally {
       this.loading = false;
     }
-  }
-
-  addGroup(group: string) {
-    if (group && group.trim()) {
-      const currentGroups = this.userForm.get('groups')?.value || [];
-      if (!currentGroups.includes(group.trim())) {
-        this.userForm.patchValue({
-          groups: [...currentGroups, group.trim()]
-        });
-      }
-    }
-  }
-
-  removeGroup(group: string) {
-    const currentGroups = this.userForm.get('groups')?.value || [];
-    this.userForm.patchValue({
-      groups: currentGroups.filter((g: string) => g !== group)
-    });
   }
 
   async deleteProfile() {

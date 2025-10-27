@@ -48,7 +48,7 @@ export class CreateUserProfileComponent implements OnInit {
         name: ['', [Validators.required, Validators.minLength(2)]],
         role: ['Employee', Validators.required],
         rate: [0, [Validators.required, Validators.min(0)]],
-        groups: [[]],
+
       });
     } catch (error) {
       console.error('Error initializing form:', error);
@@ -75,7 +75,7 @@ export class CreateUserProfileComponent implements OnInit {
         name: formValue.name,
         role: formValue.role,
         rate: formValue.rate,
-        groups: formValue.groups || [],
+  
       };
 
       const result = await this.authService.createUser(newUser);
@@ -94,21 +94,4 @@ export class CreateUserProfileComponent implements OnInit {
     }
   }
 
-  addGroup(group: string) {
-    if (group && group.trim()) {
-      const currentGroups = this.userForm.get('groups')?.value || [];
-      if (!currentGroups.includes(group.trim())) {
-        this.userForm.patchValue({
-          groups: [...currentGroups, group.trim()]
-        });
-      }
-    }
-  }
-
-  removeGroup(group: string) {
-    const currentGroups = this.userForm.get('groups')?.value || [];
-    this.userForm.patchValue({
-      groups: currentGroups.filter((g: string) => g !== group)
-    });
-  }
 }
