@@ -1,5 +1,5 @@
 
-//src/app/core/models/financial.model.ts
+// src/app/core/models/financial.model.ts
 
 export interface User {
   id: string;
@@ -7,7 +7,6 @@ export interface User {
   name: string;
   role?: 'Employee' | 'Manager' | 'Admin' | null;
   rate: number;
-  groups?: string[] | null;
 }
 
 export interface ChargeCode {
@@ -26,7 +25,7 @@ export interface Account {
   endingBalance: number | null;
   date: string;
   type: 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Expense' | null;
-  chargeCodes: ChargeCode[];
+  chargeCodes: ChargeCode[]; // Fixed typo from ChargeChode
 }
 
 export interface Transaction {
