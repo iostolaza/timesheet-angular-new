@@ -1,6 +1,7 @@
 
 <!-- src/app/timesheet/calendar-view/calendar.component.html -->
  
+<!-- src/app/timesheet/calendar-view/calendar.component.html -->
 <div class="container mx-auto p-4 max-w-6xl">
   <div class="flex justify-between items-center mb-6">
     <div>
@@ -13,7 +14,7 @@
     </div>
   </div>
   <div class="bg-white rounded-lg shadow-lg border border-gray-200 p-4 mb-6">
-    <full-calendar [options]="calendarOptions"></full-calendar>
+    <full-calendar #calendar [options]="calendarOptions"></full-calendar>
   </div>
   <div class="bg-white rounded-lg shadow-lg border border-gray-200 p-6">
     <h3 class="text-xl font-bold mb-4">Weekly Summary</h3>
@@ -35,9 +36,11 @@
         <p [class]="isValid() ? 'text-green-600' : 'text-red-600'" class="text-2xl font-bold">{{ isValid() ? 'Valid' : 'Invalid' }}</p>
       </div>
     </div>
-    <div *ngIf="!isValid()" class="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700">
-      {{ validationMessage() }}
-    </div>
+    @if (!isValid()) {
+      <div class="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700">
+        {{ validationMessage() }}
+      </div>
+    }
     <div class="text-center">
       <button mat-raised-button color="primary" (click)="submitTimesheet()" [disabled]="!isValid()" class="px-8 py-2">
         Submit Timesheet

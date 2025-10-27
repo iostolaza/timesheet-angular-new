@@ -1,6 +1,4 @@
-
-//src/app/core/services/timesheet.service.ts
-
+// src/app/core/services/timesheet.service.ts
 import { Injectable, inject } from '@angular/core';
 import { generateClient } from 'aws-amplify/data';
 import type { Schema } from '../../../../amplify/data/resource';
@@ -35,16 +33,28 @@ export class TimesheetService {
     const { data, errors } = await this.client.models.Timesheet.create({
       ...ts,
       owner: sub!,
-      status: 'submitted',
+      status: ts.status, // Respect the provided status
     });
     if (errors?.length) {
       console.error('Failed to create timesheet', errors);
       throw new Error(`Failed to create timesheet: ${errors.map(e => e.message).join(', ')}`);
     }
     if (!data) throw new Error('No data returned from timesheet creation');
-    console.log('Timesheet created', { id: data.id });
+    console.log('Timesheet created', { id: data.id, status: ts.status });
     return this.mapTimesheetFromSchema(data);
   }
+
+  async updateTimesheet(ts: Partial<Timesheet> & { id: string }): Promise<Timesheet> {
+  const { data, errors } = await this.client.models.Timesheet.update(ts);
+  if (errors?.length) {
+    console.error('Failed to update timesheet', errors);
+    throw new Error(`Failed to update timesheet: ${errors.map(e => e.message).join(', ')}`);
+  }
+  if (!data) throw new Error('No data returned from timesheet update');
+  console.log('Timesheet updated', { id: data.id, status: data.status });
+  return this.mapTimesheetFromSchema(data);
+}
+
 
   async listTimesheets(status?: 'draft' | 'submitted' | 'approved' | 'rejected'): Promise<Timesheet[]> {
     const sub = await firstValueFrom(this.authService.getUserSub());
@@ -82,39 +92,8 @@ export class TimesheetService {
 
   async addEntry(entry: Omit<TimesheetEntry, 'id' | 'timesheetId'>, timesheetId: string): Promise<TimesheetEntry> {
     const sub = await firstValueFrom(this.authService.getUserSub());
-    if (!entry.chargeCode) {
-      throw new Error('Charge code is required');
-    }
     const fullEntry = { ...entry, owner: sub!, timesheetId };
     console.log('Adding timesheet entry', { timesheetId, date: fullEntry.date });
-
-    const { data: existing, errors: existingErrors } = await this.client.models.TimesheetEntry.list({
-      filter: { timesheetId: { eq: timesheetId }, date: { eq: fullEntry.date } },
-    });
-    if (existingErrors?.length) {
-      console.error('Failed to list timesheet entries', existingErrors);
-      throw new Error(`Failed to list timesheet entries: ${existingErrors.map(e => e.message).join(', ')}`);
-    }
-    const dailyTotal = (existing as TimesheetEntry[]).reduce((sum, e) => sum + e.hours, 0) + fullEntry.hours;
-    if (dailyTotal > 8) {
-      console.warn('Daily hours exceed limit', { dailyTotal });
-      throw new Error('Daily hours exceed 8');
-    }
-
-    const weekStart = startOfWeek(new Date(fullEntry.date)).toISOString().split('T')[0];
-    const weekEnd = addDays(new Date(weekStart), 6).toISOString().split('T')[0];
-    const { data: weekEntries, errors: weekErrors } = await this.client.models.TimesheetEntry.list({
-      filter: { timesheetId: { eq: timesheetId }, date: { between: [weekStart, weekEnd] } },
-    });
-    if (weekErrors?.length) {
-      console.error('Failed to list weekly timesheet entries', weekErrors);
-      throw new Error(`Failed to list weekly timesheet entries: ${weekErrors.map(e => e.message).join(', ')}`);
-    }
-    const weeklyTotal = (weekEntries as TimesheetEntry[]).reduce((sum, e) => sum + e.hours, 0) + fullEntry.hours;
-    if (weeklyTotal > 40) {
-      console.warn('Weekly hours exceed limit', { weeklyTotal });
-      throw new Error('Weekly hours exceed 40');
-    }
 
     const { data, errors } = await this.client.models.TimesheetEntry.create(fullEntry);
     if (errors?.length) {
@@ -142,43 +121,6 @@ export class TimesheetService {
       throw new Error('Entry not found');
     }
 
-    const oldHours = (originalEntry as TimesheetEntry).hours;
-    const oldDate = (originalEntry as TimesheetEntry).date;
-
-    const { data: existing, errors: existingErrors } = await this.client.models.TimesheetEntry.list({
-      filter: { timesheetId: { eq: timesheetId }, date: { eq: entry.date } },
-    });
-    if (existingErrors?.length) {
-      console.error('Failed to list timesheet entries', existingErrors);
-      throw new Error(`Failed to list timesheet entries: ${existingErrors.map(e => e.message).join(', ')}`);
-    }
-    let dailyTotal = (existing as TimesheetEntry[]).reduce((sum, e) => sum + e.hours, 0);
-    if (oldDate === entry.date) {
-      dailyTotal = dailyTotal - oldHours + entry.hours;
-    } else {
-      dailyTotal += entry.hours;
-    }
-    if (dailyTotal > 8) {
-      console.warn('Daily hours exceed limit', { dailyTotal });
-      throw new Error('Daily hours exceed 8');
-    }
-
-    const weekStart = startOfWeek(new Date(entry.date)).toISOString().split('T')[0];
-    const weekEnd = addDays(new Date(weekStart), 6).toISOString().split('T')[0];
-    const { data: weekEntries, errors: weekErrors } = await this.client.models.TimesheetEntry.list({
-      filter: { timesheetId: { eq: timesheetId }, date: { between: [weekStart, weekEnd] } },
-    });
-    if (weekErrors?.length) {
-      console.error('Failed to list weekly timesheet entries', weekErrors);
-      throw new Error(`Failed to list weekly timesheet entries: ${weekErrors.map(e => e.message).join(', ')}`);
-    }
-    let weeklyTotal = (weekEntries as TimesheetEntry[]).reduce((sum, e) => sum + e.hours, 0);
-    weeklyTotal = weeklyTotal - oldHours + entry.hours;
-    if (weeklyTotal > 40) {
-      console.warn('Weekly hours exceed limit', { weeklyTotal });
-      throw new Error('Weekly hours exceed 40');
-    }
-
     const { data, errors } = await this.client.models.TimesheetEntry.update(entry);
     if (errors?.length) {
       console.error('Failed to update timesheet entry', errors);
@@ -203,7 +145,7 @@ export class TimesheetService {
     const user = await this.authService.getUserById(tsWithEntries.owner);
     let totalCost = 0;
     for (const entry of tsWithEntries.entries) {
-      const account = await this.financialService.getAccountByNumber(entry.chargeCode); // chargeCode is guaranteed to be string
+      const account = await this.financialService.getAccountByNumber(entry.chargeCode);
       if (!account) {
         console.error('Account not found for charge code', { chargeCode: entry.chargeCode });
         throw new Error(`Account not found for ${entry.chargeCode}`);

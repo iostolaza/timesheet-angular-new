@@ -1,6 +1,4 @@
-
 // src/app/timesheet/calendar-view/calendar.component.ts
-
 import {
   Component,
   inject,
@@ -8,6 +6,7 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   signal,
+  ViewChild,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
@@ -15,7 +14,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
-import { FullCalendarModule } from '@fullcalendar/angular';
+import { FullCalendarModule, FullCalendarComponent } from '@fullcalendar/angular';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
@@ -47,8 +46,8 @@ import { format, startOfWeek, endOfWeek } from 'date-fns';
   templateUrl: './calendar.component.html',
 })
 export class CalendarComponent implements OnInit {
-  events = signal<any[]>([]);
-  draftEntries = signal<TimesheetEntry[]>([]);
+  @ViewChild('calendar') calendarComponent!: FullCalendarComponent;
+  events = signal<TimesheetEntry[]>([]);
   weekRange = signal('');
   userEmail = signal('');
   weeklyTotal = signal(0);
@@ -56,6 +55,7 @@ export class CalendarComponent implements OnInit {
   totalCost = signal(0);
   validationMessage = signal('');
   chargeCodes = signal<ChargeCode[]>([]);
+  currentTimesheetId = signal<string | null>(null);
 
   private tsService = inject(TimesheetService);
   private authService = inject(AuthService);
@@ -65,14 +65,27 @@ export class CalendarComponent implements OnInit {
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
 
-  private currentTimesheetId = 'draft-ts-1';
   private userRate = 25;
   private today = new Date();
 
   calendarOptions = {
     plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
     initialView: 'timeGridWeek',
-    events: this.events(),
+    eventSources: [
+      {
+        events: (fetchInfo: any, successCallback: any) => {
+          successCallback(this.events().map(entry => ({
+            id: entry.id,
+            title: `${entry.chargeCode || 'Unassigned'}: ${entry.hours}h - ${entry.description}`,
+            start: `${entry.date}T${entry.startTime}`,
+            end: `${entry.date}T${entry.endTime}`,
+            backgroundColor: '#00B0FF',
+            borderColor: '#00B0FF',
+            extendedProps: { entry },
+          })));
+        },
+      },
+    ],
     editable: true,
     selectable: true,
     selectMirror: true,
@@ -94,16 +107,29 @@ export class CalendarComponent implements OnInit {
   async ngOnInit() {
     try {
       this.authService.getUserEmail().subscribe(email => {
-        if (email) this.userEmail.set(email);
+        if (email) {
+          this.userEmail.set(email);
+          this.cdr.markForCheck();
+        }
       });
 
       const start = startOfWeek(this.today, { weekStartsOn: 0 });
       const end = endOfWeek(this.today, { weekStartsOn: 0 });
       this.weekRange.set(`${format(start, 'MMM d')} – ${format(end, 'd, yyyy')}`);
 
+      // Initialize draft timesheet
+      const sub = await firstValueFrom(this.authService.getUserSub());
+    const timesheet = await this.tsService.createTimesheet({
+      status: 'draft',
+      totalHours: 0,
+      owner: sub ?? 'default-user',
+      entries: [], 
+    });
+      this.currentTimesheetId.set(timesheet.id);
+
       await this.loadChargeCodes();
       await this.loadEvents();
-      console.log('Initialized calendar component', { userEmail: this.userEmail() });
+      console.log('Initialized calendar component', { userEmail: this.userEmail(), timesheetId: this.currentTimesheetId() });
     } catch (error) {
       console.error('Failed to initialize component', error);
       this.snackBar.open('Failed to initialize timesheet', 'OK', { duration: 5000 });
@@ -123,23 +149,20 @@ export class CalendarComponent implements OnInit {
 
   async loadEvents() {
     try {
-      const timesheets = await this.tsService.listTimesheets();
+      const timesheets = await this.tsService.listTimesheets('draft');
       const allEntries: TimesheetEntry[] = [];
       for (const ts of timesheets) {
         const tsWithEntries = await this.tsService.getTimesheetWithEntries(ts.id);
         allEntries.push(...tsWithEntries.entries);
       }
-      this.events.set(allEntries.map((entry) => ({
-        id: entry.id,
-        title: `${entry.chargeCode || 'Unassigned'}: ${entry.hours}h - ${entry.description}`,
-        start: `${entry.date}T${entry.startTime}`,
-        end: `${entry.date}T${entry.endTime}`,
-        backgroundColor: '#00B0FF',
-        borderColor: '#00B0FF',
-        extendedProps: { entry, cost: entry.hours * this.userRate },
-      })));
+      this.events.set(allEntries);
       this.updateSummary();
       console.log('Loaded timesheet events', { count: allEntries.length });
+      this.cdr.markForCheck();
+      const calendarApi = this.calendarComponent?.getApi();
+      if (calendarApi) {
+        calendarApi.render();
+      }
     } catch (error) {
       console.error('Failed to load events', error);
       this.snackBar.open('Failed to load events', 'OK', { duration: 5000 });
@@ -147,7 +170,8 @@ export class CalendarComponent implements OnInit {
   }
 
   private computeHoursDiff(start: Date, end: Date): number {
-    return (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+    const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+    return Math.max(0, hours);
   }
 
   async handleSelect(info: any) {
@@ -159,23 +183,11 @@ export class CalendarComponent implements OnInit {
       const dateStr = startDate.toISOString().split('T')[0];
       const hours = this.computeHoursDiff(startDate, endDate);
 
-      const tmpEventId = `tmp-${Date.now()}`;
-      const tmpEvent = {
-        id: tmpEventId,
-        title: `New Entry: ${hours.toFixed(2)}h`,
-        start: startDate,
-        end: endDate,
-        backgroundColor: '#81C784',
-        borderColor: '#388E3C',
-        editable: false,
-        extendedProps: { tmp: true },
-      };
-      this.events.update(events => [...events, tmpEvent]);
-
       const sub = await firstValueFrom(this.authService.getUserSub());
-      const entryData: TimesheetEntry = {
-        id: tmpEventId,
-        timesheetId: this.currentTimesheetId,
+      const timesheetId = this.currentTimesheetId();
+      if (!timesheetId) throw new Error('No timesheet ID available');
+      const entryData: Omit<TimesheetEntry, 'id'> = {
+        timesheetId,
         date: dateStr,
         startTime: startStr,
         endTime: endStr,
@@ -184,20 +196,41 @@ export class CalendarComponent implements OnInit {
         chargeCode: 'Unassigned',
         description: 'Auto-created via drag',
       };
-      this.draftEntries.update(entries => [...entries, entryData]);
+
+      // Validate before adding
+      const tempEvents = [...this.events(), entryData as TimesheetEntry];
+      const dailyTotal = tempEvents
+        .filter(e => e.date === dateStr)
+        .reduce((sum, e) => sum + e.hours, 0);
+      const weeklyTotal = tempEvents.reduce((sum, e) => sum + e.hours, 0);
+      if (dailyTotal > 8) throw new Error('Daily hours would exceed 8');
+      if (weeklyTotal > 40) throw new Error('Weekly hours would exceed 40');
+
+      const savedEntry = await this.tsService.addEntry(entryData, timesheetId);
+      this.events.update(events => [...events, savedEntry]);
       this.updateSummary();
       this.snackBar.open('Entry created. Click to edit charge code.', 'OK', { duration: 3000 });
-      console.log('Added draft entry', { entryId: tmpEventId });
-    } catch (error) {
+      console.log('Added entry', { entryId: savedEntry.id });
+    } catch (error: any) {
       console.error('Failed to handle select', error);
-      this.snackBar.open('Failed to create entry', 'OK', { duration: 5000 });
+      this.snackBar.open(error.message || 'Failed to create entry', 'OK', { duration: 5000 });
+      info.revert();
+    } finally {
+      this.cdr.markForCheck();
+      const calendarApi = this.calendarComponent?.getApi();
+      if (calendarApi) {
+        calendarApi.render();
+      }
+      info.view.calendar.unselect();
     }
-    info.view.calendar.unselect();
   }
 
-  handleEventClick(info: any) {
-    const entry = info.event.extendedProps.entry || this.draftEntries().find(e => e.id === info.event.id);
-    if (!entry || info.event.extendedProps.tmp) return;
+  async handleEventClick(info: any) {
+    const entry = info.event.extendedProps.entry;
+    if (!entry) {
+      console.error('No entry found for event', { eventId: info.event.id });
+      return;
+    }
 
     const dialogRef = this.dialog.open(DayEntryDialogComponent, {
       width: '400px',
@@ -210,134 +243,177 @@ export class CalendarComponent implements OnInit {
     dialogRef.afterClosed().subscribe(async (updatedEntry: TimesheetEntry | undefined) => {
       if (updatedEntry) {
         try {
-          if (updatedEntry.id.startsWith('tmp-')) {
-            this.draftEntries.update(entries => entries.map(e => e.id === updatedEntry.id ? updatedEntry : e));
-            this.events.update(events => events.map(e => e.id === updatedEntry.id ? {
-              ...e,
-              title: `${updatedEntry.chargeCode || 'Unassigned'}: ${updatedEntry.hours}h - ${updatedEntry.description}`,
-              extendedProps: { entry: updatedEntry, cost: updatedEntry.hours * this.userRate },
-            } : e));
-            console.log('Updated draft entry', { entryId: updatedEntry.id });
-          } else {
-            await this.tsService.updateEntry(updatedEntry, this.currentTimesheetId);
-            await this.loadEvents();
-            console.log('Updated persisted entry', { entryId: updatedEntry.id });
-          }
+          const timesheetId = this.currentTimesheetId();
+          if (!timesheetId) throw new Error('No timesheet ID available');
+
+          // Validate before updating
+          const tempEvents = this.events().map(e => e.id === updatedEntry.id ? updatedEntry : e);
+          const dailyTotal = tempEvents
+            .filter(e => e.date === updatedEntry.date)
+            .reduce((sum, e) => sum + e.hours, 0);
+          const weeklyTotal = tempEvents.reduce((sum, e) => sum + e.hours, 0);
+          if (dailyTotal > 8) throw new Error('Daily hours would exceed 8');
+          if (weeklyTotal > 40) throw new Error('Weekly hours would exceed 40');
+
+          await this.tsService.updateEntry(updatedEntry, timesheetId);
+          this.events.update(events => events.map(e => e.id === updatedEntry.id ? updatedEntry : e));
           this.updateSummary();
           this.snackBar.open('Entry updated.', 'OK', { duration: 2000 });
-        } catch (error) {
+          console.log('Updated entry', { entryId: updatedEntry.id });
+        } catch (error: any) {
           console.error('Failed to update entry', error);
-          this.snackBar.open('Failed to update entry', 'OK', { duration: 5000 });
+          this.snackBar.open(error.message || 'Failed to update entry', 'OK', { duration: 5000 });
+        } finally {
+          this.cdr.markForCheck();
+          const calendarApi = this.calendarComponent?.getApi();
+          if (calendarApi) {
+            calendarApi.render();
+          }
         }
       }
     });
   }
 
   async handleEventDrop(info: any) {
-    const entry = info.event.extendedProps.entry || this.draftEntries().find(e => e.id === info.event.id);
-    if (!entry) return;
+    const entry = info.event.extendedProps.entry;
+    if (!entry) {
+      console.error('No entry found for event drop', { eventId: info.event.id });
+      info.revert();
+      return;
+    }
     try {
       const newDate = info.event.startStr.split('T')[0];
-      const startTime = info.event.startStr.split('T')[1]?.substring(0, 5);
-      const endTime = info.event.endStr.split('T')[1]?.substring(0, 5);
+      const startTime = info.event.startStr.split('T')[1]?.substring(0, 5) || entry.startTime;
+      const endTime = info.event.endStr.split('T')[1]?.substring(0, 5) || entry.endTime;
       const hours = this.computeHoursDiff(new Date(info.event.start), new Date(info.event.end));
       const updatedEntry = { ...entry, date: newDate, startTime, endTime, hours };
 
-      if (entry.id.startsWith('tmp-')) {
-        this.draftEntries.update(entries => entries.map(e => e.id === entry.id ? updatedEntry : e));
-        this.events.update(events => events.map(e => e.id === entry.id ? {
-          ...e,
-          start: `${newDate}T${startTime}`,
-          end: `${newDate}T${endTime}`,
-          title: `${updatedEntry.chargeCode || 'Unassigned'}: ${hours}h - ${updatedEntry.description}`,
-        } : e));
-        console.log('Moved draft entry', { entryId: entry.id });
-      } else {
-        await this.tsService.updateEntry(updatedEntry, this.currentTimesheetId);
-        await this.loadEvents();
-        console.log('Moved persisted entry', { entryId: entry.id });
-      }
+      // Validate before updating
+      const tempEvents = this.events().map(e => e.id === entry.id ? updatedEntry : e);
+      const dailyTotal = tempEvents
+        .filter(e => e.date === newDate)
+        .reduce((sum, e) => sum + e.hours, 0);
+      const weeklyTotal = tempEvents.reduce((sum, e) => sum + e.hours, 0);
+      if (dailyTotal > 8) throw new Error('Daily hours would exceed 8');
+      if (weeklyTotal > 40) throw new Error('Weekly hours would exceed 40');
+
+      const timesheetId = this.currentTimesheetId();
+      if (!timesheetId) throw new Error('No timesheet ID available');
+      await this.tsService.updateEntry(updatedEntry, timesheetId);
+      this.events.update(events => events.map(e => e.id === entry.id ? updatedEntry : e));
       this.updateSummary();
-    } catch (error) {
+      console.log('Moved entry', { entryId: entry.id });
+    } catch (error: any) {
       console.error('Failed to handle event drop', error);
-      this.snackBar.open('Failed to move entry', 'OK', { duration: 5000 });
+      this.snackBar.open(error.message || 'Failed to move entry', 'OK', { duration: 5000 });
+      info.revert();
+    } finally {
+      this.cdr.markForCheck();
+      const calendarApi = this.calendarComponent?.getApi();
+      if (calendarApi) {
+        calendarApi.render();
+      }
     }
   }
 
   async handleEventResize(info: any) {
-    const entry = info.event.extendedProps.entry || this.draftEntries().find(e => e.id === info.event.id);
-    if (!entry) return;
+    const entry = info.event.extendedProps.entry;
+    if (!entry) {
+      console.error('No entry found for event resize', { eventId: info.event.id });
+      info.revert();
+      return;
+    }
     try {
       const newStart = info.event.startStr.split('T')[1]?.substring(0, 5) || entry.startTime;
       const newEnd = info.event.endStr.split('T')[1]?.substring(0, 5) || entry.endTime;
       const hours = this.computeHoursDiff(new Date(info.event.start), new Date(info.event.end));
       const updatedEntry = { ...entry, startTime: newStart, endTime: newEnd, hours };
 
-      if (entry.id.startsWith('tmp-')) {
-        this.draftEntries.update(entries => entries.map(e => e.id === entry.id ? updatedEntry : e));
-        this.events.update(events => events.map(e => e.id === entry.id ? {
-          ...e,
-          title: `${updatedEntry.chargeCode || 'Unassigned'}: ${hours}h - ${updatedEntry.description}`,
-        } : e));
-        console.log('Resized draft entry', { entryId: entry.id });
-      } else {
-        await this.tsService.updateEntry(updatedEntry, this.currentTimesheetId);
-        await this.loadEvents();
-        console.log('Resized persisted entry', { entryId: entry.id });
-      }
+      // Validate before updating
+      const tempEvents = this.events().map(e => e.id === entry.id ? updatedEntry : e);
+      const dailyTotal = tempEvents
+        .filter(e => e.date === entry.date)
+        .reduce((sum, e) => sum + e.hours, 0);
+      const weeklyTotal = tempEvents.reduce((sum, e) => sum + e.hours, 0);
+      if (dailyTotal > 8) throw new Error('Daily hours would exceed 8');
+      if (weeklyTotal > 40) throw new Error('Weekly hours would exceed 40');
+
+      const timesheetId = this.currentTimesheetId();
+      if (!timesheetId) throw new Error('No timesheet ID available');
+      await this.tsService.updateEntry(updatedEntry, timesheetId);
+      this.events.update(events => events.map(e => e.id === entry.id ? updatedEntry : e));
       this.updateSummary();
-    } catch (error) {
+      console.log('Resized entry', { entryId: entry.id });
+    } catch (error: any) {
       console.error('Failed to handle event resize', error);
-      this.snackBar.open('Failed to resize entry', 'OK', { duration: 5000 });
+      this.snackBar.open(error.message || 'Failed to resize entry', 'OK', { duration: 5000 });
+      info.revert();
+    } finally {
+      this.cdr.markForCheck();
+      const calendarApi = this.calendarComponent?.getApi();
+      if (calendarApi) {
+        calendarApi.render();
+      }
     }
   }
 
   private updateSummary() {
-    const allEntries = [...this.draftEntries(), ...this.events().map(e => e.extendedProps.entry).filter(e => e && !e.id.startsWith('tmp-'))];
+    const allEntries = this.events();
     this.weeklyTotal.set(allEntries.reduce((sum, e) => sum + e.hours, 0));
     this.dailyAvg.set(this.weeklyTotal() / 5);
     this.totalCost.set(allEntries.reduce((sum, e) => sum + (e.hours * this.userRate), 0));
     this.validate();
     console.log('Updated summary', { totalHours: this.weeklyTotal(), totalCost: this.totalCost() });
+    this.cdr.markForCheck();
   }
 
   private validate() {
     let msg = '';
-    const allEntries = [...this.draftEntries(), ...this.events().map(e => e.extendedProps.entry).filter(e => e && !e.id.startsWith('tmp-'))];
+    const allEntries = this.events();
     const dailyExceed = allEntries.filter(e => {
       const dailyTotal = allEntries.filter(entry => entry.date === e.date).reduce((sum, entry) => sum + entry.hours, 0);
       return dailyTotal > 8;
     });
     if (dailyExceed.length > 0) msg += 'Daily hours exceed 8h; ';
     if (this.weeklyTotal() > 40) msg += 'Weekly hours exceed 40h. ';
+    const hasUnassignedChargeCode = allEntries.some(e => e.chargeCode === 'Unassigned');
+    if (hasUnassignedChargeCode) msg += 'All entries must have a valid charge code; ';
     this.validationMessage.set(msg);
     if (msg) this.snackBar.open(msg, 'OK', { duration: 5000 });
+    this.cdr.markForCheck();
   }
 
   async submitTimesheet() {
-    if (!this.isValid()) return;
+    if (!this.isValid()) {
+      this.snackBar.open('Cannot submit: ' + this.validationMessage(), 'OK', { duration: 5000 });
+      return;
+    }
     try {
+      const timesheetId = this.currentTimesheetId();
+      if (!timesheetId) throw new Error('No timesheet ID available');
       const sub = await firstValueFrom(this.authService.getUserSub());
       const tsData = {
-        entries: this.draftEntries(),
+        id: timesheetId,
         totalHours: this.weeklyTotal(),
         totalCost: this.totalCost(),
         status: 'submitted' as const,
         owner: sub ?? 'default-user',
       };
-      const ts = await this.tsService.createTimesheet(tsData);
-      for (const entry of this.draftEntries()) {
-        await this.tsService.addEntry(entry, ts.id);
-      }
-      this.draftEntries.set([]);
+      await this.tsService.updateTimesheet(tsData); // Use TimesheetService to update
       this.events.set([]);
       this.updateSummary();
-      this.router.navigate(['/review', ts.id]);
+      this.router.navigate(['/review', timesheetId]);
       this.snackBar.open('Timesheet submitted.', 'OK', { duration: 2000 });
-      console.log('Timesheet submitted', { timesheetId: ts.id });
-    } catch (error) {
+      console.log('Timesheet submitted', { timesheetId });
+    } catch (error: any) {
       console.error('Failed to submit timesheet', error);
-      this.snackBar.open('Failed to submit timesheet', 'OK', { duration: 5000 });
+      this.snackBar.open(error.message || 'Failed to submit timesheet', 'OK', { duration: 5000 });
+    } finally {
+      this.cdr.markForCheck();
+      const calendarApi = this.calendarComponent?.getApi();
+      if (calendarApi) {
+        calendarApi.render();
+      }
     }
   }
 
