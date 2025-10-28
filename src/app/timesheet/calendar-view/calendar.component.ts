@@ -1,8 +1,9 @@
-// src/app/timesheet/calendar-view/calendar.component.ts
+// file: src/app/timesheet/calendar-view/calendar.component.ts
 import {
   Component,
   inject,
   OnInit,
+  AfterViewInit,
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   signal,
@@ -45,7 +46,7 @@ import { format, startOfWeek, endOfWeek } from 'date-fns';
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './calendar.component.html',
 })
-export class CalendarComponent implements OnInit {
+export class CalendarComponent implements OnInit, AfterViewInit {
   @ViewChild('calendar') calendarComponent!: FullCalendarComponent;
   events = signal<TimesheetEntry[]>([]);
   weekRange = signal('');
@@ -74,15 +75,17 @@ export class CalendarComponent implements OnInit {
     eventSources: [
       {
         events: (fetchInfo: any, successCallback: any) => {
-          successCallback(this.events().map(entry => ({
-            id: entry.id,
-            title: `${entry.chargeCode || 'Unassigned'}: ${entry.hours}h - ${entry.description}`,
-            start: `${entry.date}T${entry.startTime}`,
-            end: `${entry.date}T${entry.endTime}`,
-            backgroundColor: '#00B0FF',
-            borderColor: '#00B0FF',
-            extendedProps: { entry },
-          })));
+          successCallback(
+            this.events().map(entry => ({
+              id: entry.id,
+              title: `${entry.chargeCode || 'Unassigned'}: ${entry.hours}h - ${entry.description}`,
+              start: `${entry.date}T${entry.startTime}`,
+              end: `${entry.date}T${entry.endTime}`,
+              backgroundColor: '#00B0FF',
+              borderColor: '#00B0FF',
+              extendedProps: { entry },
+            }))
+          );
         },
       },
     ],
@@ -102,6 +105,10 @@ export class CalendarComponent implements OnInit {
     eventClick: this.handleEventClick.bind(this),
     eventDrop: this.handleEventDrop.bind(this),
     eventResize: this.handleEventResize.bind(this),
+    // Allow overlapping events like Google Calendar
+    eventOverlap: true,
+    // Stack overlapping events side-by-side (not on top)
+    slotEventOverlap: false,
   };
 
   async ngOnInit() {
@@ -117,22 +124,32 @@ export class CalendarComponent implements OnInit {
       const end = endOfWeek(this.today, { weekStartsOn: 0 });
       this.weekRange.set(`${format(start, 'MMM d')} – ${format(end, 'd, yyyy')}`);
 
-      // Initialize draft timesheet
       const sub = await firstValueFrom(this.authService.getUserSub());
-    const timesheet = await this.tsService.createTimesheet({
-      status: 'draft',
-      totalHours: 0,
-      owner: sub ?? 'default-user',
-      entries: [], 
-    });
+      const timesheet = await this.tsService.createTimesheet({
+        status: 'draft',
+        totalHours: 0,
+        owner: sub ?? 'default-user',
+        entries: [],
+      });
       this.currentTimesheetId.set(timesheet.id);
 
       await this.loadChargeCodes();
       await this.loadEvents();
-      console.log('Initialized calendar component', { userEmail: this.userEmail(), timesheetId: this.currentTimesheetId() });
+      console.log('Initialized calendar component', {
+        userEmail: this.userEmail(),
+        timesheetId: this.currentTimesheetId(),
+      });
     } catch (error) {
       console.error('Failed to initialize component', error);
       this.snackBar.open('Failed to initialize timesheet', 'OK', { duration: 5000 });
+    }
+  }
+
+  ngAfterViewInit() {
+    try {
+      this.calendarComponent.getApi().refetchEvents();
+    } catch (error) {
+      console.error('Failed initial refetch', error);
     }
   }
 
@@ -159,9 +176,14 @@ export class CalendarComponent implements OnInit {
       this.updateSummary();
       console.log('Loaded timesheet events', { count: allEntries.length });
       this.cdr.markForCheck();
+
       const calendarApi = this.calendarComponent?.getApi();
       if (calendarApi) {
-        calendarApi.render();
+        try {
+          calendarApi.refetchEvents();
+        } catch (error) {
+          console.error('Failed to refetch events in loadEvents', error);
+        }
       }
     } catch (error) {
       console.error('Failed to load events', error);
@@ -186,6 +208,7 @@ export class CalendarComponent implements OnInit {
       const sub = await firstValueFrom(this.authService.getUserSub());
       const timesheetId = this.currentTimesheetId();
       if (!timesheetId) throw new Error('No timesheet ID available');
+
       const entryData: Omit<TimesheetEntry, 'id'> = {
         timesheetId,
         date: dateStr,
@@ -197,7 +220,6 @@ export class CalendarComponent implements OnInit {
         description: 'Auto-created via drag',
       };
 
-      // Validate before adding
       const tempEvents = [...this.events(), entryData as TimesheetEntry];
       const dailyTotal = tempEvents
         .filter(e => e.date === dateStr)
@@ -219,7 +241,11 @@ export class CalendarComponent implements OnInit {
       this.cdr.markForCheck();
       const calendarApi = this.calendarComponent?.getApi();
       if (calendarApi) {
-        calendarApi.render();
+        try {
+          calendarApi.refetchEvents();
+        } catch (error) {
+          console.error('Failed to refetch events after select', error);
+        }
       }
       info.view.calendar.unselect();
     }
@@ -234,10 +260,7 @@ export class CalendarComponent implements OnInit {
 
     const dialogRef = this.dialog.open(DayEntryDialogComponent, {
       width: '400px',
-      data: {
-        entry,
-        availableChargeCodes: this.chargeCodes(),
-      },
+      data: { entry, availableChargeCodes: this.chargeCodes() },
     });
 
     dialogRef.afterClosed().subscribe(async (updatedEntry: TimesheetEntry | undefined) => {
@@ -246,8 +269,9 @@ export class CalendarComponent implements OnInit {
           const timesheetId = this.currentTimesheetId();
           if (!timesheetId) throw new Error('No timesheet ID available');
 
-          // Validate before updating
-          const tempEvents = this.events().map(e => e.id === updatedEntry.id ? updatedEntry : e);
+          const tempEvents = this.events().map(e =>
+            e.id === updatedEntry.id ? updatedEntry : e
+          );
           const dailyTotal = tempEvents
             .filter(e => e.date === updatedEntry.date)
             .reduce((sum, e) => sum + e.hours, 0);
@@ -256,7 +280,9 @@ export class CalendarComponent implements OnInit {
           if (weeklyTotal > 40) throw new Error('Weekly hours would exceed 40');
 
           await this.tsService.updateEntry(updatedEntry, timesheetId);
-          this.events.update(events => events.map(e => e.id === updatedEntry.id ? updatedEntry : e));
+          this.events.update(events =>
+            events.map(e => (e.id === updatedEntry.id ? updatedEntry : e))
+          );
           this.updateSummary();
           this.snackBar.open('Entry updated.', 'OK', { duration: 2000 });
           console.log('Updated entry', { entryId: updatedEntry.id });
@@ -267,7 +293,11 @@ export class CalendarComponent implements OnInit {
           this.cdr.markForCheck();
           const calendarApi = this.calendarComponent?.getApi();
           if (calendarApi) {
-            calendarApi.render();
+            try {
+              calendarApi.refetchEvents();
+            } catch (error) {
+              console.error('Failed to refetch events after click', error);
+            }
           }
         }
       }
@@ -281,6 +311,7 @@ export class CalendarComponent implements OnInit {
       info.revert();
       return;
     }
+
     try {
       const newDate = info.event.startStr.split('T')[0];
       const startTime = info.event.startStr.split('T')[1]?.substring(0, 5) || entry.startTime;
@@ -288,8 +319,7 @@ export class CalendarComponent implements OnInit {
       const hours = this.computeHoursDiff(new Date(info.event.start), new Date(info.event.end));
       const updatedEntry = { ...entry, date: newDate, startTime, endTime, hours };
 
-      // Validate before updating
-      const tempEvents = this.events().map(e => e.id === entry.id ? updatedEntry : e);
+      const tempEvents = this.events().map(e => (e.id === entry.id ? updatedEntry : e));
       const dailyTotal = tempEvents
         .filter(e => e.date === newDate)
         .reduce((sum, e) => sum + e.hours, 0);
@@ -300,7 +330,9 @@ export class CalendarComponent implements OnInit {
       const timesheetId = this.currentTimesheetId();
       if (!timesheetId) throw new Error('No timesheet ID available');
       await this.tsService.updateEntry(updatedEntry, timesheetId);
-      this.events.update(events => events.map(e => e.id === entry.id ? updatedEntry : e));
+      this.events.update(events =>
+        events.map(e => (e.id === entry.id ? updatedEntry : e))
+      );
       this.updateSummary();
       console.log('Moved entry', { entryId: entry.id });
     } catch (error: any) {
@@ -311,7 +343,11 @@ export class CalendarComponent implements OnInit {
       this.cdr.markForCheck();
       const calendarApi = this.calendarComponent?.getApi();
       if (calendarApi) {
-        calendarApi.render();
+        try {
+          calendarApi.refetchEvents();
+        } catch (error) {
+          console.error('Failed to refetch events after drop', error);
+        }
       }
     }
   }
@@ -323,14 +359,14 @@ export class CalendarComponent implements OnInit {
       info.revert();
       return;
     }
+
     try {
       const newStart = info.event.startStr.split('T')[1]?.substring(0, 5) || entry.startTime;
       const newEnd = info.event.endStr.split('T')[1]?.substring(0, 5) || entry.endTime;
       const hours = this.computeHoursDiff(new Date(info.event.start), new Date(info.event.end));
       const updatedEntry = { ...entry, startTime: newStart, endTime: newEnd, hours };
 
-      // Validate before updating
-      const tempEvents = this.events().map(e => e.id === entry.id ? updatedEntry : e);
+      const tempEvents = this.events().map(e => (e.id === entry.id ? updatedEntry : e));
       const dailyTotal = tempEvents
         .filter(e => e.date === entry.date)
         .reduce((sum, e) => sum + e.hours, 0);
@@ -341,7 +377,9 @@ export class CalendarComponent implements OnInit {
       const timesheetId = this.currentTimesheetId();
       if (!timesheetId) throw new Error('No timesheet ID available');
       await this.tsService.updateEntry(updatedEntry, timesheetId);
-      this.events.update(events => events.map(e => e.id === entry.id ? updatedEntry : e));
+      this.events.update(events =>
+        events.map(e => (e.id === entry.id ? updatedEntry : e))
+      );
       this.updateSummary();
       console.log('Resized entry', { entryId: entry.id });
     } catch (error: any) {
@@ -352,7 +390,11 @@ export class CalendarComponent implements OnInit {
       this.cdr.markForCheck();
       const calendarApi = this.calendarComponent?.getApi();
       if (calendarApi) {
-        calendarApi.render();
+        try {
+          calendarApi.refetchEvents();
+        } catch (error) {
+          console.error('Failed to refetch events after resize', error);
+        }
       }
     }
   }
@@ -361,9 +403,12 @@ export class CalendarComponent implements OnInit {
     const allEntries = this.events();
     this.weeklyTotal.set(allEntries.reduce((sum, e) => sum + e.hours, 0));
     this.dailyAvg.set(this.weeklyTotal() / 5);
-    this.totalCost.set(allEntries.reduce((sum, e) => sum + (e.hours * this.userRate), 0));
+    this.totalCost.set(allEntries.reduce((sum, e) => sum + e.hours * this.userRate, 0));
     this.validate();
-    console.log('Updated summary', { totalHours: this.weeklyTotal(), totalCost: this.totalCost() });
+    console.log('Updated summary', {
+      totalHours: this.weeklyTotal(),
+      totalCost: this.totalCost(),
+    });
     this.cdr.markForCheck();
   }
 
@@ -371,7 +416,9 @@ export class CalendarComponent implements OnInit {
     let msg = '';
     const allEntries = this.events();
     const dailyExceed = allEntries.filter(e => {
-      const dailyTotal = allEntries.filter(entry => entry.date === e.date).reduce((sum, entry) => sum + entry.hours, 0);
+      const dailyTotal = allEntries
+        .filter(entry => entry.date === e.date)
+        .reduce((sum, entry) => sum + entry.hours, 0);
       return dailyTotal > 8;
     });
     if (dailyExceed.length > 0) msg += 'Daily hours exceed 8h; ';
@@ -388,6 +435,7 @@ export class CalendarComponent implements OnInit {
       this.snackBar.open('Cannot submit: ' + this.validationMessage(), 'OK', { duration: 5000 });
       return;
     }
+
     try {
       const timesheetId = this.currentTimesheetId();
       if (!timesheetId) throw new Error('No timesheet ID available');
@@ -399,7 +447,7 @@ export class CalendarComponent implements OnInit {
         status: 'submitted' as const,
         owner: sub ?? 'default-user',
       };
-      await this.tsService.updateTimesheet(tsData); // Use TimesheetService to update
+      await this.tsService.updateTimesheet(tsData);
       this.events.set([]);
       this.updateSummary();
       this.router.navigate(['/review', timesheetId]);
@@ -412,7 +460,11 @@ export class CalendarComponent implements OnInit {
       this.cdr.markForCheck();
       const calendarApi = this.calendarComponent?.getApi();
       if (calendarApi) {
-        calendarApi.render();
+        try {
+          calendarApi.refetchEvents();
+        } catch (error) {
+          console.error('Failed to refetch events after submit', error);
+        }
       }
     }
   }
