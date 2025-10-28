@@ -493,4 +493,4 @@ export class CalendarComponent implements OnInit, AfterViewInit {
   isValid(): boolean {
     return !this.validationMessage();
   }
-}
+} 

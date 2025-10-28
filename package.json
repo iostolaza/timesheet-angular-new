@@ -55,6 +55,7 @@
     "@angular/compiler-cli": "^20.1.0",
     "@aws-amplify/backend": "^1.16.1",
     "@aws-amplify/backend-cli": "^1.8.0",
+    "@tailwindcss/postcss": "^4.1.16",
     "@types/jasmine": "~5.1.0",
     "@types/jest": "30.0.0",
     "@types/uuid": "^9.0.8",
