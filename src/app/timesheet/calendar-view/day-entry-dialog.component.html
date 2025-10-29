@@ -1,30 +1,33 @@
 
 <!-- src/app/timesheet/calendar-view/day-entry-dialog.component.html -->
 
-    <h2 mat-dialog-title>Edit Day Entry</h2>
-    <mat-dialog-content class="max-h-96 overflow-y-auto p-4">
-      <form [formGroup]="form" class="space-y-4">
-        <mat-form-field appearance="outline" class="w-full">
-          <mat-label>Charge Code</mat-label>
-          <mat-select formControlName="chargeCode">
-            <mat-option value="">None</mat-option>
-            <mat-option *ngFor="let code of data.availableChargeCodes" [value]="code.name">
-              {{ code.name }}
-            </mat-option>
-          </mat-select>
-        </mat-form-field>
-        <mat-form-field appearance="outline" class="w-full">
-          <mat-label>Comment</mat-label>
-          <textarea matInput formControlName="description" rows="3" required></textarea>
-          <mat-error *ngIf="form.get('description')?.hasError('required')">
-            Comment is required
-          </mat-error>
-        </mat-form-field>
-      </form>
-    </mat-dialog-content>
-    <mat-dialog-actions class="p-4 bg-gray-50 border-t">
-      <button mat-button class="mr-2" (click)="dialogRef.close()">Cancel</button>
-      <button mat-raised-button color="primary" (click)="save()" [disabled]="form.invalid">
-        Save
-      </button>
-    </mat-dialog-actions>
+<h2 mat-dialog-title>Edit Day Entry</h2>
+  <mat-dialog-content class="max-h-96 overflow-y-auto p-4">
+    <form [formGroup]="form" class="space-y-4">
+      <mat-form-field appearance="outline" class="w-full">
+        <mat-label>Charge Code</mat-label>
+        <mat-select formControlName="chargeCode">
+        <mat-option value="">None</mat-option>
+        <mat-option *ngFor="let code of data.availableChargeCodes" [value]="code.name">
+        {{ code.name }}
+        </mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="w-full">
+        <mat-label>Comment</mat-label>
+        <textarea matInput formControlName="description" rows="3" required></textarea>
+        <mat-error *ngIf="form.get('description')?.hasError('required')">
+        Comment is required
+        </mat-error>
+      </mat-form-field>
+    </form>
+  </mat-dialog-content>
+
+  <mat-dialog-actions class="p-4 bg-gray-50 border-t">
+    <button mat-button class="mr-2" (click)="dialogRef.close()">Cancel</button>
+    <button mat-button color="warn" class="mr-2" (click)="delete()">Delete</button>
+    <button mat-raised-button color="primary" (click)="save()" [disabled]="form.invalid">
+    Save
+    </button>
+  </mat-dialog-actions>

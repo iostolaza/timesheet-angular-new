@@ -9,7 +9,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
 import { CommonModule } from '@angular/common';
-import { TimesheetEntry, } from '../../core/models/timesheet.model';
+import { TimesheetEntry } from '../../core/models/timesheet.model';
 import { ChargeCode } from '../../core/models/financial.model';
 
 interface DialogData {
@@ -53,5 +53,9 @@ export class DayEntryDialogComponent {
       };
       this.dialogRef.close(updatedEntry);
     }
+  }
+
+  delete() {
+    this.dialogRef.close('delete');
   }
 }

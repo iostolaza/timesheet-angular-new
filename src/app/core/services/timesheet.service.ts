@@ -134,6 +134,16 @@ export class TimesheetService {
     console.log('Timesheet entry updated', { id: data.id });
     return data as TimesheetEntry;
   }
+  
+async deleteEntry(id: string, timesheetId: string): Promise<void> {
+  const { errors } = await this.client.models.TimesheetEntry.delete({ id });
+  if (errors?.length) {
+    console.error('Failed to delete timesheet entry', errors);
+    throw new Error(`Failed to delete entry: ${errors.map(e => e.message).join(', ')}`);
+  }
+  await this.updateTotals(timesheetId);
+  console.log('Timesheet entry deleted', { id });
+}
 
   async approveTimesheet(id: string): Promise<Timesheet> {
     const tsWithEntries = await this.getTimesheetWithEntries(id);
