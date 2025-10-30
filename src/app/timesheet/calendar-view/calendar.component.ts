@@ -1,4 +1,6 @@
-// file: src/app/timesheet/calendar-view/calendar.component.ts
+
+// src/app/timesheet/calendar-view/calendar.component.ts
+
 import {
   Component,
   inject,
@@ -57,6 +59,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
   validationMessage = signal('');
   chargeCodes = signal<ChargeCode[]>([]);
   currentTimesheetId = signal<string | null>(null);
+  associatedChargeCodes = signal<ChargeCode[]>([]);
 
   private tsService = inject(TimesheetService);
   private authService = inject(AuthService);
@@ -109,17 +112,16 @@ export class CalendarComponent implements OnInit, AfterViewInit {
     eventOverlap: true,
     slotEventOverlap: false,
     eventDidMount: (info: any) => {
-    info.el.addEventListener('contextmenu', (e: MouseEvent) => {
-      e.preventDefault();
-      // Simple confirm for delete (or open a MatDialog confirm)
-      if (confirm('Delete this entry?')) {
-        const entry = info.event.extendedProps.entry;
-        if (entry) {
-          this.handleDelete(entry);  // Call a new method for delete
+      info.el.addEventListener('contextmenu', (e: MouseEvent) => {
+        e.preventDefault();
+        if (confirm('Delete this entry?')) {
+          const entry = info.event.extendedProps.entry;
+          if (entry) {
+            this.handleDelete(entry);
+          }
         }
-      }
-    });
-  },
+      });
+    },
   };
 
   async ngOnInit() {
@@ -142,6 +144,8 @@ export class CalendarComponent implements OnInit, AfterViewInit {
         owner: sub ?? 'default-user',
         entries: [],
       });
+      const tsWithEntries = await this.tsService.getTimesheetWithEntries(timesheet.id);
+      this.associatedChargeCodes.set(tsWithEntries.associatedChargeCodes || []);
       this.currentTimesheetId.set(timesheet.id);
 
       await this.loadChargeCodes();
@@ -207,134 +211,134 @@ export class CalendarComponent implements OnInit, AfterViewInit {
     return Math.max(0, hours);
   }
 
-async handleSelect(info: any) {
-  try {
-    const dateStr = info.startStr.split('T')[0];
-    const startStr = info.startStr.split('T')[1].substring(0, 5);
-    const endStr = info.endStr.split('T')[1].substring(0, 5);
-    const hours = this.computeHoursDiff(info.start, info.end);
+  async handleSelect(info: any) {
+    try {
+      const dateStr = info.startStr.split('T')[0];
+      const startStr = info.startStr.split('T')[1].substring(0, 5);
+      const endStr = info.endStr.split('T')[1].substring(0, 5);
+      const hours = this.computeHoursDiff(info.start, info.end);
 
-    const sub = await firstValueFrom(this.authService.getUserSub());
-    const timesheetId = this.currentTimesheetId();
-    if (!timesheetId) throw new Error('No timesheet ID available');
+      const sub = await firstValueFrom(this.authService.getUserSub());
+      const timesheetId = this.currentTimesheetId();
+      if (!timesheetId) throw new Error('No timesheet ID available');
 
-    const entryData: Omit<TimesheetEntry, 'id'> = {
-      timesheetId,
-      date: dateStr,
-      startTime: startStr,
-      endTime: endStr,
-      hours,
-      owner: sub ?? 'default-user',
-      chargeCode: ' ',
-      description: ' ',
-    };
+      const entryData: Omit<TimesheetEntry, 'id'> = {
+        timesheetId,
+        date: dateStr,
+        startTime: startStr,
+        endTime: endStr,
+        hours,
+        owner: sub ?? 'default-user',
+        chargeCode: ' ',
+        description: ' ',
+      };
 
-    const tempEvents = [...this.events(), entryData as TimesheetEntry];
-    const dailyTotal = tempEvents
-      .filter(e => e.date === dateStr)
-      .reduce((sum, e) => sum + e.hours, 0);
-    const weeklyTotal = tempEvents.reduce((sum, e) => sum + e.hours, 0);
-    if (dailyTotal > 8) throw new Error('Daily hours would exceed 8');
-    if (weeklyTotal > 40) throw new Error('Weekly hours would exceed 40');
+      const tempEvents = [...this.events(), entryData as TimesheetEntry];
+      const dailyTotal = tempEvents
+        .filter(e => e.date === dateStr)
+        .reduce((sum, e) => sum + e.hours, 0);
+      const weeklyTotal = tempEvents.reduce((sum, e) => sum + e.hours, 0);
+      if (dailyTotal > 8) console.warn('Daily hours exceed 8');
+      if (weeklyTotal > 40) console.warn('Weekly hours exceed 40');
 
-    const savedEntry = await this.tsService.addEntry(entryData, timesheetId);
-    this.events.update(events => [...events, savedEntry]);
-    this.updateSummary();
-    this.snackBar.open('Entry created. Click to edit charge code.', 'OK', { duration: 3000 });
-    console.log('Added entry', { entryId: savedEntry.id });
-  } catch (error: any) {
-    console.error('Failed to handle select', error);
-    this.snackBar.open(error.message || 'Failed to create entry', 'OK', { duration: 5000 });
-    info.revert();
-  } finally {
-    this.cdr.markForCheck();
-    const calendarApi = this.calendarComponent?.getApi();
-    if (calendarApi) {
-      try {
-        calendarApi.refetchEvents();
-      } catch (error) {
-        console.error('Failed to refetch events after select', error);
+      const savedEntry = await this.tsService.addEntry(entryData, timesheetId);
+      this.events.update(events => [...events, savedEntry]);
+      this.updateSummary();
+      this.snackBar.open('Entry created. Click to edit charge code.', 'OK', { duration: 3000 });
+      console.log('Added entry', { entryId: savedEntry.id });
+    } catch (error: any) {
+      console.error('Failed to handle select', error);
+      this.snackBar.open(error.message || 'Failed to create entry', 'OK', { duration: 5000 });
+      info.revert();
+    } finally {
+      this.cdr.markForCheck();
+      const calendarApi = this.calendarComponent?.getApi();
+      if (calendarApi) {
+        try {
+          calendarApi.refetchEvents();
+        } catch (error) {
+          console.error('Failed to refetch events after select', error);
+        }
       }
+      info.view.calendar.unselect();
     }
-    info.view.calendar.unselect();
-  }
-}
-
-async handleEventClick(info: any) {
-  const entry = info.event.extendedProps.entry;
-  if (!entry) {
-    console.error('No entry found for event', { eventId: info.event.id });
-    return;
   }
 
-  const dialogRef = this.dialog.open(DayEntryDialogComponent, {
-    width: '400px',
-    data: { entry, availableChargeCodes: this.chargeCodes() },
-  });
+  async handleEventClick(info: any) {
+    const entry = info.event.extendedProps.entry;
+    if (!entry) {
+      console.error('No entry found for event', { eventId: info.event.id });
+      return;
+    }
 
-  dialogRef.afterClosed().subscribe(async (result: TimesheetEntry | 'delete' | undefined) => {
-    if (result === 'delete') {
-      try {
-        const timesheetId = this.currentTimesheetId();
-        if (!timesheetId) throw new Error('No timesheet ID available');
-        await this.tsService.deleteEntry(entry.id, timesheetId);
-        this.events.update(events => events.filter(e => e.id !== entry.id));
-        this.updateSummary();
-        this.snackBar.open('Entry deleted.', 'OK', { duration: 2000 });
-        console.log('Deleted entry', { entryId: entry.id });
-      } catch (error: any) {
-        console.error('Failed to delete entry', error);
-        this.snackBar.open(error.message || 'Failed to delete entry', 'OK', { duration: 5000 });
-      } finally {
-        this.cdr.markForCheck();
-        const calendarApi = this.calendarComponent?.getApi();
-        if (calendarApi) {
-          try {
-            calendarApi.refetchEvents();
-          } catch (error) {
-            console.error('Failed to refetch events after delete', error);
+    const dialogRef = this.dialog.open(DayEntryDialogComponent, {
+      width: '400px',
+      data: { entry, availableChargeCodes: this.chargeCodes() },
+    });
+
+    dialogRef.afterClosed().subscribe(async (result: TimesheetEntry | 'delete' | undefined) => {
+      if (result === 'delete') {
+        try {
+          const timesheetId = this.currentTimesheetId();
+          if (!timesheetId) throw new Error('No timesheet ID available');
+          await this.tsService.deleteEntry(entry.id, timesheetId);
+          this.events.update(events => events.filter(e => e.id !== entry.id));
+          this.updateSummary();
+          this.snackBar.open('Entry deleted.', 'OK', { duration: 2000 });
+          console.log('Deleted entry', { entryId: entry.id });
+        } catch (error: any) {
+          console.error('Failed to delete entry', error);
+          this.snackBar.open(error.message || 'Failed to delete entry', 'OK', { duration: 5000 });
+        } finally {
+          this.cdr.markForCheck();
+          const calendarApi = this.calendarComponent?.getApi();
+          if (calendarApi) {
+            try {
+              calendarApi.refetchEvents();
+            } catch (error) {
+              console.error('Failed to refetch events after delete', error);
+            }
+          }
+        }
+      } else if (result) {
+        try {
+          const timesheetId = this.currentTimesheetId();
+          if (!timesheetId) throw new Error('No timesheet ID available');
+
+          const tempEvents = this.events().map(e =>
+            e.id === result.id ? result : e
+          );
+          const dailyTotal = tempEvents
+            .filter(e => e.date === result.date)
+            .reduce((sum, e) => sum + e.hours, 0);
+          const weeklyTotal = tempEvents.reduce((sum, e) => sum + e.hours, 0);
+          if (dailyTotal > 8) console.warn('Daily hours exceed 8');
+          if (weeklyTotal > 40) console.warn('Weekly hours exceed 40');
+
+          await this.tsService.updateEntry(result, timesheetId);
+          this.events.update(events =>
+            events.map(e => (e.id === result.id ? result : e))
+          );
+          this.updateSummary();
+          this.snackBar.open('Entry updated.', 'OK', { duration: 2000 });
+          console.log('Updated entry', { entryId: result.id });
+        } catch (error: any) {
+          console.error('Failed to update entry', error);
+          this.snackBar.open(error.message || 'Failed to update entry', 'OK', { duration: 5000 });
+        } finally {
+          this.cdr.markForCheck();
+          const calendarApi = this.calendarComponent?.getApi();
+          if (calendarApi) {
+            try {
+              calendarApi.refetchEvents();
+            } catch (error) {
+              console.error('Failed to refetch events after click', error);
+            }
           }
         }
       }
-    } else if (result) {
-      try {
-        const timesheetId = this.currentTimesheetId();
-        if (!timesheetId) throw new Error('No timesheet ID available');
-
-        const tempEvents = this.events().map(e =>
-          e.id === result.id ? result : e
-        );
-        const dailyTotal = tempEvents
-          .filter(e => e.date === result.date)
-          .reduce((sum, e) => sum + e.hours, 0);
-        const weeklyTotal = tempEvents.reduce((sum, e) => sum + e.hours, 0);
-        if (dailyTotal > 8) throw new Error('Daily hours would exceed 8');
-        if (weeklyTotal > 40) throw new Error('Weekly hours would exceed 40');
-
-        await this.tsService.updateEntry(result, timesheetId);
-        this.events.update(events =>
-          events.map(e => (e.id === result.id ? result : e))
-        );
-        this.updateSummary();
-        this.snackBar.open('Entry updated.', 'OK', { duration: 2000 });
-        console.log('Updated entry', { entryId: result.id });
-      } catch (error: any) {
-        console.error('Failed to update entry', error);
-        this.snackBar.open(error.message || 'Failed to update entry', 'OK', { duration: 5000 });
-      } finally {
-        this.cdr.markForCheck();
-        const calendarApi = this.calendarComponent?.getApi();
-        if (calendarApi) {
-          try {
-            calendarApi.refetchEvents();
-          } catch (error) {
-            console.error('Failed to refetch events after click', error);
-          }
-        }
-      }
-    }
-  });
-}
+    });
+  }
 
   async handleEventDrop(info: any) {
     const entry = info.event.extendedProps.entry;
@@ -356,8 +360,8 @@ async handleEventClick(info: any) {
         .filter(e => e.date === newDate)
         .reduce((sum, e) => sum + e.hours, 0);
       const weeklyTotal = tempEvents.reduce((sum, e) => sum + e.hours, 0);
-      if (dailyTotal > 8) throw new Error('Daily hours would exceed 8');
-      if (weeklyTotal > 40) throw new Error('Weekly hours would exceed 40');
+      if (dailyTotal > 8) console.warn('Daily hours exceed 8');
+      if (weeklyTotal > 40) console.warn('Weekly hours exceed 40');
 
       const timesheetId = this.currentTimesheetId();
       if (!timesheetId) throw new Error('No timesheet ID available');
@@ -403,8 +407,8 @@ async handleEventClick(info: any) {
         .filter(e => e.date === entry.date)
         .reduce((sum, e) => sum + e.hours, 0);
       const weeklyTotal = tempEvents.reduce((sum, e) => sum + e.hours, 0);
-      if (dailyTotal > 8) throw new Error('Daily hours would exceed 8');
-      if (weeklyTotal > 40) throw new Error('Weekly hours would exceed 40');
+      if (dailyTotal > 8) console.warn('Daily hours exceed 8');
+      if (weeklyTotal > 40) console.warn('Weekly hours exceed 40');
 
       const timesheetId = this.currentTimesheetId();
       if (!timesheetId) throw new Error('No timesheet ID available');
@@ -509,10 +513,16 @@ async handleEventClick(info: any) {
         data: { chargeCodes: this.chargeCodes() },
       });
 
-      dialogRef.afterClosed().subscribe((selectedCode: ChargeCode | undefined) => {
+      dialogRef.afterClosed().subscribe(async (selectedCode: ChargeCode | undefined) => {
         if (selectedCode) {
           console.log('Charge code selected', { code: selectedCode.name });
           this.snackBar.open(`Selected charge code: ${selectedCode.name}`, 'OK', { duration: 2000 });
+          const timesheetId = this.currentTimesheetId();
+          if (timesheetId) {
+            const updatedTs = await this.tsService.addAssociatedChargeCode(timesheetId, selectedCode);
+            this.associatedChargeCodes.set(updatedTs.associatedChargeCodes || []);
+            this.chargeCodes.update(codes => [...new Set([...codes, selectedCode])]);
+          }
           this.cdr.markForCheck();
         }
       });
@@ -527,27 +537,27 @@ async handleEventClick(info: any) {
   }
 
   private async handleDelete(entry: TimesheetEntry) {
-  try {
-    const timesheetId = this.currentTimesheetId();
-    if (!timesheetId) throw new Error('No timesheet ID available');
-    await this.tsService.deleteEntry(entry.id, timesheetId);
-    this.events.update(events => events.filter(e => e.id !== entry.id));
-    this.updateSummary();
-    this.snackBar.open('Entry deleted.', 'OK', { duration: 2000 });
-    console.log('Deleted entry', { entryId: entry.id });
-  } catch (error: any) {
-    console.error('Failed to delete entry', error);
-    this.snackBar.open(error.message || 'Failed to delete entry', 'OK', { duration: 5000 });
-  } finally {
-    this.cdr.markForCheck();
-    const calendarApi = this.calendarComponent?.getApi();
-    if (calendarApi) {
-      try {
-        calendarApi.refetchEvents();
-      } catch (error) {
-        console.error('Failed to refetch events after delete', error);
+    try {
+      const timesheetId = this.currentTimesheetId();
+      if (!timesheetId) throw new Error('No timesheet ID available');
+      await this.tsService.deleteEntry(entry.id, timesheetId);
+      this.events.update(events => events.filter(e => e.id !== entry.id));
+      this.updateSummary();
+      this.snackBar.open('Entry deleted.', 'OK', { duration: 2000 });
+      console.log('Deleted entry', { entryId: entry.id });
+    } catch (error: any) {
+      console.error('Failed to delete entry', error);
+      this.snackBar.open(error.message || 'Failed to delete entry', 'OK', { duration: 5000 });
+    } finally {
+      this.cdr.markForCheck();
+      const calendarApi = this.calendarComponent?.getApi();
+      if (calendarApi) {
+        try {
+          calendarApi.refetchEvents();
+        } catch (error) {
+          console.error('Failed to refetch events after delete', error);
+        }
       }
     }
   }
 }
-} 

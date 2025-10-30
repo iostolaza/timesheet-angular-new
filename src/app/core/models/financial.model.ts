@@ -7,6 +7,8 @@ export interface User {
   name: string;
   role?: 'Employee' | 'Manager' | 'Admin' | null;
   rate: number;
+  otMultiplier?: number;  // Added
+  taxRate?: number;  // Added
 }
 
 export interface ChargeCode {
@@ -25,7 +27,7 @@ export interface Account {
   endingBalance: number | null;
   date: string;
   type: 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Expense' | null;
-  chargeCodes: ChargeCode[]; // Fixed typo from ChargeChode
+  chargeCodes: ChargeCode[]; 
 }
 
 export interface Transaction {

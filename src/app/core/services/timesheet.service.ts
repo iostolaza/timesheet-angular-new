@@ -5,7 +5,8 @@ import type { Schema } from '../../../../amplify/data/resource';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from './auth.service';
 import { FinancialService } from './financial.service';
-import { Timesheet, TimesheetEntry } from '../models/timesheet.model';
+import { Timesheet, TimesheetEntry, DailyAggregate } from '../models/timesheet.model';
+import { ChargeCode } from '../models/financial.model';
 import { addDays, startOfWeek } from 'date-fns';
 
 @Injectable({
@@ -24,6 +25,11 @@ export class TimesheetService {
       totalCost: data.totalCost ?? undefined,
       owner: data.owner,
       rejectionReason: data.rejectionReason ?? undefined,
+      associatedChargeCodes: data.associatedChargeCodesJson ? JSON.parse(data.associatedChargeCodesJson) : undefined,
+      dailyAggregates: data.dailyAggregatesJson ? JSON.parse(data.dailyAggregatesJson) : undefined,
+      grossTotal: data.grossTotal,
+      taxAmount: data.taxAmount,
+      netTotal: data.netTotal,
       entries: [],
     };
   }
@@ -45,16 +51,31 @@ export class TimesheetService {
   }
 
   async updateTimesheet(ts: Partial<Timesheet> & { id: string }): Promise<Timesheet> {
-  const { data, errors } = await this.client.models.Timesheet.update(ts);
-  if (errors?.length) {
-    console.error('Failed to update timesheet', errors);
-    throw new Error(`Failed to update timesheet: ${errors.map(e => e.message).join(', ')}`);
+    if (ts.associatedChargeCodes) {
+      (ts as any).associatedChargeCodesJson = JSON.stringify(ts.associatedChargeCodes);
+      delete ts.associatedChargeCodes;
+    }
+    if (ts.dailyAggregates) {
+      (ts as any).dailyAggregatesJson = JSON.stringify(ts.dailyAggregates);
+      delete ts.dailyAggregates;
+    }
+    const { data, errors } = await this.client.models.Timesheet.update(ts);
+    if (errors?.length) {
+      console.error('Failed to update timesheet', errors);
+      throw new Error(`Failed to update timesheet: ${errors.map(e => e.message).join(', ')}`);
+    }
+    if (!data) throw new Error('No data returned from timesheet update');
+    console.log('Timesheet updated', { id: data.id, status: data.status });
+    return this.mapTimesheetFromSchema(data);
   }
-  if (!data) throw new Error('No data returned from timesheet update');
-  console.log('Timesheet updated', { id: data.id, status: data.status });
-  return this.mapTimesheetFromSchema(data);
-}
 
+  async addAssociatedChargeCode(timesheetId: string, code: ChargeCode): Promise<Timesheet> {
+    const tsWithEntries = await this.getTimesheetWithEntries(timesheetId);
+    const currentCodes = tsWithEntries.associatedChargeCodes || [];
+    if (currentCodes.some(c => c.name === code.name)) return tsWithEntries;
+    const updatedCodes = [...currentCodes, code];
+    return this.updateTimesheet({ id: timesheetId, associatedChargeCodes: updatedCodes });
+  }
 
   async listTimesheets(status?: 'draft' | 'submitted' | 'approved' | 'rejected'): Promise<Timesheet[]> {
     const sub = await firstValueFrom(this.authService.getUserSub());
@@ -134,16 +155,16 @@ export class TimesheetService {
     console.log('Timesheet entry updated', { id: data.id });
     return data as TimesheetEntry;
   }
-  
-async deleteEntry(id: string, timesheetId: string): Promise<void> {
-  const { errors } = await this.client.models.TimesheetEntry.delete({ id });
-  if (errors?.length) {
-    console.error('Failed to delete timesheet entry', errors);
-    throw new Error(`Failed to delete entry: ${errors.map(e => e.message).join(', ')}`);
+
+  async deleteEntry(id: string, timesheetId: string): Promise<void> {
+    const { errors } = await this.client.models.TimesheetEntry.delete({ id });
+    if (errors?.length) {
+      console.error('Failed to delete timesheet entry', errors);
+      throw new Error(`Failed to delete entry: ${errors.map(e => e.message).join(', ')}`);
+    }
+    await this.updateTotals(timesheetId);
+    console.log('Timesheet entry deleted', { id });
   }
-  await this.updateTotals(timesheetId);
-  console.log('Timesheet entry deleted', { id });
-}
 
   async approveTimesheet(id: string): Promise<Timesheet> {
     const tsWithEntries = await this.getTimesheetWithEntries(id);
@@ -230,12 +251,43 @@ async deleteEntry(id: string, timesheetId: string): Promise<void> {
     return this.mapTimesheetFromSchema(data);
   }
 
+  private async calculateAggregates(entries: TimesheetEntry[], rate: number, otMultiplier: number, taxRate: number): Promise<{dailyAggregates: DailyAggregate[], grossTotal: number, taxAmount: number, netTotal: number}> {
+    const grouped = entries.reduce((acc, e) => {
+      if (!acc[e.date]) acc[e.date] = { hours: 0, entries: [] };
+      acc[e.date].hours += e.hours;
+      acc[e.date].entries.push(e);
+      return acc;
+    }, {} as Record<string, {hours: number, entries: TimesheetEntry[]}>);
+    const dailyAggregates: DailyAggregate[] = Object.entries(grouped).map(([date, {hours}]) => {
+      const base = Math.min(8, hours);
+      const ot = Math.max(0, hours - 8);
+      const regPay = base * rate;
+      const otPay = ot * rate * otMultiplier;
+      return { date, base, ot, regPay, otPay, subtotal: regPay + otPay };
+    });
+    const grossTotal = dailyAggregates.reduce((sum, d) => sum + d.subtotal, 0);
+    const taxAmount = grossTotal * taxRate;
+    const netTotal = grossTotal - taxAmount;
+    return { dailyAggregates, grossTotal, taxAmount, netTotal };
+  }
+
   private async updateTotals(id: string): Promise<void> {
     const tsWithEntries = await this.getTimesheetWithEntries(id);
+    const user = await this.authService.getUserById(tsWithEntries.owner);
+    const { dailyAggregates, grossTotal, taxAmount, netTotal } = await this.calculateAggregates(
+      tsWithEntries.entries,
+      user.rate,
+      user.otMultiplier ?? 1.5,  // Default if not set
+      user.taxRate ?? 0.015
+    );
     const totalHours = tsWithEntries.entries.reduce((sum, e) => sum + e.hours, 0);
     const { data, errors } = await this.client.models.Timesheet.update({
       id,
       totalHours,
+      dailyAggregatesJson: JSON.stringify(dailyAggregates),
+      grossTotal,
+      taxAmount,
+      netTotal,
     });
     if (errors?.length) {
       console.error('Failed to update timesheet totals', errors);

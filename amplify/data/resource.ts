@@ -15,6 +15,8 @@ const schema = a.schema({
       name: a.string().required(),
       role: a.enum(['Employee', 'Manager', 'Admin']),
       rate: a.float().required(),
+      otMultiplier: a.float().default(1.5),
+      taxRate: a.float().default(0.015),
     })
     .authorization(allow => [
       allow.owner().to(['read', 'update', 'delete']),
@@ -64,6 +66,11 @@ const schema = a.schema({
       totalCost: a.float(),
       owner: a.string().required(),
       rejectionReason: a.string(),
+      associatedChargeCodesJson: a.string(),
+      dailyAggregatesJson: a.string(), 
+      grossTotal: a.float(),
+      taxAmount: a.float(),
+      netTotal: a.float(),
       entries: a.hasMany('TimesheetEntry', 'timesheetId'),
     })
     .authorization(allow => [
