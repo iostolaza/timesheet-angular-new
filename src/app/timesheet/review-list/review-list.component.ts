@@ -7,7 +7,7 @@ import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { TimesheetService } from '../../core/services/timesheet.service';
-import { ReviewFormComponent } from '../review-form/review-form.component';
+import { ReviewComponent } from '../review-form/review-form.component';
 import { Timesheet } from '../../core/models/timesheet.model';
 
 @Component({
@@ -31,7 +31,7 @@ export class ReviewListComponent implements OnInit {
   }
 
   openReview(id: string) {
-    const dialogRef = this.dialog.open(ReviewFormComponent, { data: { id } });
+    const dialogRef = this.dialog.open(ReviewComponent , { data: { id } });
     dialogRef.afterClosed().subscribe(async (result) => {
       if (result) {
         if (result.approved) {
