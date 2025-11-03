@@ -21,9 +21,9 @@ export interface Timesheet {
   owner: string;
   rejectionReason?: string;
   associatedChargeCodes?: ChargeCode[];
-  associatedChargeCodesJson?: string;  // For schema
+  associatedChargeCodesJson?: string; 
   dailyAggregates?: DailyAggregate[];
-  dailyAggregatesJson?: string;  // For schema
+  dailyAggregatesJson?: string; 
   grossTotal?: number;
   taxAmount?: number;
   netTotal?: number;

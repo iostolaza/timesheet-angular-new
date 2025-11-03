@@ -35,29 +35,33 @@ export class AuthService {
     this.setupAuthListener();
   }
 
-  private setupAuthListener() {
-    Hub.listen('auth', ({ payload }: { payload: HubPayload }) => {
-      const { event, data } = payload;
-      if (event === 'signedIn' && data?.tokens?.idToken?.payload) {
-        const payloadData = data.tokens.idToken.payload as Record<string, unknown>;
-        const sub = payloadData['sub'] as string;
-        if (sub) {
-          const user: User = {
-            id: sub,
-            email: ((payloadData['email'] || payloadData['cognito:username'] || payloadData['preferred_username'] || data.username || '') as string),
-            name: 'Default User',
-            role: 'Employee',
-            rate: 25.0,
-          };
-          this.userSubject.next(user);
-        }
-      } else if (event === 'signedOut') {
-        this.userSubject.next(null);
-        this.isInitialized = false;
-        this.initializationPromise = null;
+private setupAuthListener() {
+  Hub.listen('auth', async ({ payload }: { payload: HubPayload }) => { 
+    const { event, data } = payload;
+    if (event === 'signedIn' && data?.tokens?.idToken?.payload) {
+      const payloadData = data.tokens.idToken.payload as Record<string, unknown>;
+      const sub = payloadData['sub'] as string;
+      if (sub) {
+        const user: User = {
+          id: sub,
+          email: ((payloadData['email'] || payloadData['cognito:username'] || payloadData['preferred_username'] || data.username || '') as string),
+          name: 'Default User',
+          role: 'Employee',
+          rate: 25.0,
+          otMultiplier: 1.5,
+          taxRate: 0.015,
+        };
+        await this.createUserIfNotExists(user);  // Await the create
+        this.userSubject.next(user);
       }
-    });
-  }
+    } else if (event === 'signedOut') {
+      this.userSubject.next(null);
+      this.isInitialized = false;
+      this.initializationPromise = null;
+    }
+  });
+}
+
 
   private async initializeUser(): Promise<void> {
     if (this.isInitialized) return;
@@ -265,16 +269,35 @@ export class AuthService {
     }
   }
 
-  async createUserIfNotExists(user: User): Promise<void> {
+async createUserIfNotExists(user: User): Promise<void> {
+  try {
+    const existingUser = await this.getUserById(user.id);
+    console.log('User already exists:', user.id);
+  } catch (err) {
     try {
-      await this.getUserById(user.id);
-      console.log('User already exists:', user.id);
-    } catch (err) {
-      const { data } = await this.client.models.User.create(user);
+      const { data, errors } = await this.client.models.User.create(user);
+      if (errors?.length) {
+        console.error('Failed to create user during if-not-exists:', errors);
+        throw new Error(`Create failed: ${errors.map(e => e.message).join(', ')}`);
+      }
       console.log('Created new User:', data);
+    } catch (createError) {
+      console.error('Error in createUserIfNotExists:', createError);
+      throw createError;  // Re-throw to bubble up
     }
   }
+}
 
+async getUserIdentity(): Promise<string> {
+  try {
+    const sub = await this.getCurrentUserId();
+    const email = await this.getCurrentUserEmail();
+    return `${sub}::${email}`;
+  } catch (error) {
+    console.error('Failed to get user identity:', error);
+    throw error;
+  }
+}
   async getUserById(id: string): Promise<User> {
     const { data } = await this.client.models.User.get({ id });
     if (!data) throw new Error(`User with id ${id} not found`);

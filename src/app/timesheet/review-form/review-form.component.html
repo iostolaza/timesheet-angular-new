@@ -4,7 +4,11 @@
 <div class="container mx-auto p-4">
       <h1>Timesheet Review - ID: {{ timesheet?.id }}</h1>
       <p>Status: {{ timesheet?.status }}</p>
+
+      <div class="bg-white shadow-md rounded-lg p-6 mb-6">
       <full-calendar [options]="calendarOptions"></full-calendar>
+
+      </div>
       <h2>Granular Entries</h2>
       <table mat-table [dataSource]="timesheet?.entries || []">
         <ng-container matColumnDef="date">

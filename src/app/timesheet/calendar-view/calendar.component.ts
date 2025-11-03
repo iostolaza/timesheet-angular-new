@@ -141,8 +141,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
       const timesheet = await this.tsService.createTimesheet({
         status: 'draft',
         totalHours: 0,
-        owner: sub ?? 'default-user',
-        entries: [],
+        owner: sub!
       });
       const tsWithEntries = await this.tsService.getTimesheetWithEntries(timesheet.id);
       this.associatedChargeCodes.set(tsWithEntries.associatedChargeCodes || []);
@@ -249,7 +248,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
     } catch (error: any) {
       console.error('Failed to handle select', error);
       this.snackBar.open(error.message || 'Failed to create entry', 'OK', { duration: 5000 });
-      info.revert();
+      // info.revert();
     } finally {
       this.cdr.markForCheck();
       const calendarApi = this.calendarComponent?.getApi();

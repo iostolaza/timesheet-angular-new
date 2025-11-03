@@ -1,4 +1,6 @@
+
 // src/app/core/services/timesheet.service.ts
+
 import { Injectable, inject } from '@angular/core';
 import { generateClient } from 'aws-amplify/data';
 import type { Schema } from '../../../../amplify/data/resource';
@@ -25,7 +27,7 @@ export class TimesheetService {
       totalCost: data.totalCost ?? undefined,
       owner: data.owner,
       rejectionReason: data.rejectionReason ?? undefined,
-      associatedChargeCodes: data.associatedChargeCodesJson ? JSON.parse(data.associatedChargeCodesJson) : undefined,
+      associatedChargeCodes: data.associatedChargeCodesJson ? JSON.parse(data.associatedChargeCodesJson) : [],
       dailyAggregates: data.dailyAggregatesJson ? JSON.parse(data.dailyAggregatesJson) : undefined,
       grossTotal: data.grossTotal,
       taxAmount: data.taxAmount,
@@ -34,13 +36,14 @@ export class TimesheetService {
     };
   }
 
-  async createTimesheet(ts: Omit<Timesheet, 'id'>): Promise<Timesheet> {
-    const sub = await firstValueFrom(this.authService.getUserSub());
+  async createTimesheet(ts: Omit<Timesheet, 'id' | 'entries'>): Promise<Timesheet> {
+    if (!ts.owner) {
+      throw new Error('Owner is required for timesheet creation');
+    }
     const { data, errors } = await this.client.models.Timesheet.create({
-      ...ts,
-      owner: sub!,
-      status: ts.status, // Respect the provided status
-    });
+       ...ts, 
+       associatedChargeCodesJson: JSON.stringify([]),  
+        });
     if (errors?.length) {
       console.error('Failed to create timesheet', errors);
       throw new Error(`Failed to create timesheet: ${errors.map(e => e.message).join(', ')}`);
@@ -112,8 +115,7 @@ export class TimesheetService {
   }
 
   async addEntry(entry: Omit<TimesheetEntry, 'id' | 'timesheetId'>, timesheetId: string): Promise<TimesheetEntry> {
-    const sub = await firstValueFrom(this.authService.getUserSub());
-    const fullEntry = { ...entry, owner: sub!, timesheetId };
+    const fullEntry = { ...entry, timesheetId };
     console.log('Adding timesheet entry', { timesheetId, date: fullEntry.date });
 
     const { data, errors } = await this.client.models.TimesheetEntry.create(fullEntry);
