@@ -1,6 +1,7 @@
 
 // src/app/timesheet/calendar-view/calendar.component.ts
 
+// src/app/timesheet/calendar-view/calendar.component.ts
 import {
   Component,
   inject,
@@ -21,7 +22,6 @@ import { FullCalendarModule, FullCalendarComponent } from '@fullcalendar/angular
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import { firstValueFrom } from 'rxjs';
 import { Router } from '@angular/router';
 import { TimesheetService } from '../../core/services/timesheet.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -126,7 +126,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
 
   async ngOnInit() {
     try {
-      this.authService.getUserEmail().subscribe(email => {
+      this.authService.getCurrentUserEmail().then(email => {
         if (email) {
           this.userEmail.set(email);
           this.cdr.markForCheck();
@@ -137,7 +137,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
       const end = endOfWeek(this.today, { weekStartsOn: 0 });
       this.weekRange.set(`${format(start, 'MMM d')} – ${format(end, 'd, yyyy')}`);
 
-      const sub = await firstValueFrom(this.authService.getUserSub());
+      const sub = await this.authService.getUserIdentity();
       const timesheet = await this.tsService.createTimesheet({
         status: 'draft',
         totalHours: 0,
@@ -217,7 +217,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
       const endStr = info.endStr.split('T')[1].substring(0, 5);
       const hours = this.computeHoursDiff(info.start, info.end);
 
-      const sub = await firstValueFrom(this.authService.getUserSub());
+      const sub = await this.authService.getUserIdentity();
       const timesheetId = this.currentTimesheetId();
       if (!timesheetId) throw new Error('No timesheet ID available');
 
@@ -474,7 +474,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
     try {
       const timesheetId = this.currentTimesheetId();
       if (!timesheetId) throw new Error('No timesheet ID available');
-      const sub = await firstValueFrom(this.authService.getUserSub());
+      const sub = await this.authService.getUserIdentity();
       const tsData = {
         id: timesheetId,
         totalHours: this.weeklyTotal(),

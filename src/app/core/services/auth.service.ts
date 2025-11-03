@@ -1,98 +1,72 @@
+
 // src/app/core/services/auth.service.ts
 
-import { Injectable } from '@angular/core';
-import { Amplify } from 'aws-amplify';
-import { signIn, signOut, signUp, fetchAuthSession, confirmSignUp, confirmSignIn, getCurrentUser } from 'aws-amplify/auth';
-import { Hub } from 'aws-amplify/utils';
+import { Injectable, signal } from '@angular/core';
+import { BehaviorSubject, from, Observable } from 'rxjs';
+import { signIn, signUp, confirmSignUp, confirmSignIn, signOut, getCurrentUser, fetchUserAttributes, UserAttributeKey } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/data';
-import type { Schema } from '../../../../amplify/data/resource';
-import { Observable, from, BehaviorSubject, throwError, of, firstValueFrom } from 'rxjs';
-import { map, switchMap, filter, catchError, timeout, debounceTime } from 'rxjs/operators';
-import outputs from '../../../../amplify_outputs.json';
-import { User } from '../models/financial.model';
+import type { Schema } from '../../../../amplify/data/resource'; 
+import type { UserProfile } from '../models/user.model';
 
-interface HubPayload {
-  event: string;
-  data?: {
-    tokens?: {
-      idToken?: { payload: Record<string, unknown> };
-    };
-    username?: string;
-  };
-}
+const client = generateClient<Schema>();
+
+export type SignInResult =
+  | { isSignedIn: true; user: UserProfile }
+  | { isSignedIn: false; nextStep?: any };
 
 @Injectable({
   providedIn: 'root'
 })
 export class AuthService {
-  private userSubject = new BehaviorSubject<User | null>(null);
-  private client = generateClient<Schema>();
+  private currentUserSub = new BehaviorSubject<UserProfile | null>(null);
+  public currentUser$ = this.currentUserSub.asObservable();
+  private currentUserSignal = signal<UserProfile | null>(null);
 
   constructor() {
-    Amplify.configure(outputs);
-    this.setupAuthListener();
-    this.loadUser();  // Load initial user if already authenticated
+    void this.setupAuthListener();
   }
 
-  private setupAuthListener() {
-    Hub.listen('auth', async ({ payload }: { payload: HubPayload }) => { 
-      const { event } = payload;
-      if (event === 'signedIn') {
-        await this.loadUser();
-      } else if (event === 'signedOut') {
-        this.userSubject.next(null);
-      }
-    });
-  }
-
-  private async loadUser(): Promise<void> {
+  private async setupAuthListener(): Promise<void> {
     try {
-      const session = await fetchAuthSession();
-      if (!session.tokens?.idToken?.payload) {
-        this.userSubject.next(null);
+      const { userId } = await getCurrentUser().catch(() => ({} as any));
+      if (!userId) {
+        this.emitUser(null);
         return;
       }
-      const payload = session.tokens.idToken.payload as Record<string, unknown>;
-      const sub = payload['sub'] as string;
-      if (!sub) {
-        this.userSubject.next(null);
-        return;
-      }
-      const userData: User = {
-        id: sub,
-        email: (payload['email'] as string) || '',
-        name: 'Default User',
-        role: 'Employee',
-        rate: 25.0,
-        otMultiplier: 1.5,
-        taxRate: 0.015,
-      };
-      const user = await this.getUserById(sub) || await this.createUser(userData);
-      this.userSubject.next(user);
-    } catch (error) {
-      console.error('Failed to load user:', error);
-      this.userSubject.next(null);
+      const attributes = await fetchUserAttributes().catch(() => ({}) as Partial<Record<UserAttributeKey, string>>);
+      const email = attributes.email;
+      const profile = await this.loadUserProfile(userId, email);
+      this.emitUser(profile);
+    } catch (err) {
+      console.error('setupAuthListener error', err);
+      this.emitUser(null);
     }
   }
 
-  signIn(email: string, password: string): Observable<any> {
-    return from(signIn({ username: email, password })).pipe(
-      timeout({ each: 10000, with: () => throwError(() => new Error('Sign-in timeout - check network/Cognito')) }),
-      catchError((error: any) => {
-        console.error('AuthService signIn pipe error:', error);
-        return throwError(() => new Error(`Sign-in failed: ${error.message || error}`));
-      })
-    );
+  private emitUser(u: UserProfile | null) {
+    this.currentUserSub.next(u);
+    this.currentUserSignal.set(u);
   }
 
-  confirmSignIn(newPassword: string): Observable<User> {
-    return from(confirmSignIn({ challengeResponse: newPassword })).pipe(
-      switchMap(() => this.getCurrentUser().pipe(filter((user): user is User => user !== null))),
-      catchError((error: any) => {
-        console.error('AuthService confirmSignIn error:', error);
-        return throwError(() => new Error(`Password confirmation failed: ${error.message || error}`));
-      })
-    );
+  private async loadUserProfile(sub?: string, email?: string): Promise<UserProfile | null> {
+    if (!sub && !email) return null;
+    try {
+      if (sub) {
+        const resp = await client.models.User.get({ id: sub });
+        if (resp.data) return resp.data as UserProfile;
+      }
+      if (email) {
+        const resp = await client.models.User.list({
+          filter: { email: { eq: email } },
+          limit: 1
+        });
+        if (resp.data?.length) return resp.data[0] as UserProfile;
+      }
+      return null;
+    } catch (err) {
+      console.error('loadUserProfile error', err);
+      return null;
+    }
   }
 
   signUp(email: string, password: string): Observable<any> {
@@ -100,155 +74,135 @@ export class AuthService {
       username: email,
       password,
       options: { userAttributes: { email } }
-    })).pipe(
-      catchError((error: any) => {
-        console.error('AuthService signUp error:', error);
-        return throwError(() => new Error(`Sign-up failed: ${error.message || error}`));
-      })
-    );
+    }));
   }
 
   confirmSignUp(email: string, code: string): Observable<any> {
-    return from(confirmSignUp({ username: email, confirmationCode: code })).pipe(
-      catchError((error: any) => {
-        console.error('AuthService confirmSignUp error:', error);
-        return throwError(() => new Error(`Confirmation failed: ${error.message || error}`));
-      })
-    );
+    return from(confirmSignUp({
+      username: email,
+      confirmationCode: code
+    }));
+  }
+
+  signIn(email: string, password: string): Observable<SignInResult> {
+    return from((async () => {
+      const output = await signIn({ username: email, password });
+      if (output.nextStep.signInStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED') {
+        return { isSignedIn: false, nextStep: output.nextStep } as SignInResult;
+      }
+      const { userId } = await getCurrentUser();
+      const attributes = await fetchUserAttributes();
+      const emailAttr = attributes.email;
+      let profile = await this.loadUserProfile(userId, emailAttr);
+      if (!profile) {
+        profile = await this.createUser({ id: userId, email: emailAttr } as Partial<UserProfile>);
+      }
+      this.emitUser(profile);
+      return { isSignedIn: true, user: profile } as SignInResult;
+    })());
+  }
+
+  confirmSignIn(newPassword: string): Observable<UserProfile> {
+    return from((async () => {
+      await confirmSignIn({ challengeResponse: newPassword });
+      const { userId } = await getCurrentUser();
+      const attributes = await fetchUserAttributes();
+      const email = attributes.email;
+      let profile = await this.loadUserProfile(userId, email);
+      if (!profile) {
+        profile = await this.createUser({ id: userId, email } as Partial<UserProfile>);
+      }
+      this.emitUser(profile);
+      return profile;
+    })());
   }
 
   signOut(): Observable<void> {
-    return from(signOut()).pipe(
-      map(() => {
-        this.userSubject.next(null);
-        return undefined;
-      }),
-      catchError((error: any) => throwError(() => new Error(`Sign-out failed: ${error.message}`)))
-    );
+    return from((async () => {
+      await signOut();
+      this.emitUser(null);
+    })());
   }
 
-  getCurrentUser(): Observable<User | null> {
-    return this.userSubject.asObservable().pipe(
-      switchMap(user => user ? of(user) : from(this.loadUser()).pipe(map(() => this.userSubject.value)))
-    );
+  getCurrentUser(): Observable<UserProfile | null> {
+    return this.currentUser$;
   }
 
-  async getCurrentUserId(): Promise<string> {
+  async getCurrentUserId(): Promise<string | null> {
+    const u = this.currentUserSignal();
+    return u?.id ?? null;
+  }
+
+  async getCurrentUserEmail(): Promise<string | null> {
+    const u = this.currentUserSignal();
+    return u?.email ?? null;
+  }
+
+  async createUser(payload: Partial<UserProfile>): Promise<UserProfile> {
+    const toCreate: Partial<UserProfile> = {
+      id: payload.id || undefined,
+      email: payload.email!,
+      name: payload.name ?? '',
+      role: payload.role ?? 'Employee',
+      rate: payload.rate ?? 0,
+      otMultiplier: payload.otMultiplier ?? 1.5,
+      taxRate: payload.taxRate ?? 0.015,
+    };
+    const resp = await client.models.User.create(toCreate as any);
+    const created = resp.data as UserProfile;
+    this.emitUser(created);
+    return created;
+  }
+
+  async updateUser(id: string, updates: Partial<UserProfile>): Promise<UserProfile | null> {
     try {
-      const user = await getCurrentUser();
-      return user.userId;
-    } catch (error) {
-      console.error('Error getting current user:', error);
-      throw error;
-    }
-  }
-
-  async getCurrentUserEmail(): Promise<string> {
-    try {
-      const user = await getCurrentUser();
-      return user.signInDetails?.loginId || '';
-    } catch (error) {
-      console.error('Error getting user email:', error);
-      throw error;
-    }
-  }
-
-  async createUser(user: User): Promise<User> {
-    try {
-      const { data, errors } = await this.client.models.User.create(user);
-      if (errors?.length) {
-        console.error('Failed to create user:', errors);
-        throw new Error(`Create failed: ${errors.map(e => e.message).join(', ')}`);
-      }
-      return data as User;
-    } catch (error) {
-      console.error('Failed to create user:', error);
-      throw error;
-    }
-  }
-
-  async updateUser(id: string, updates: Partial<User>): Promise<User | null> {
-    try {
-      const { data, errors } = await this.client.models.User.update({ id, ...updates });
-      if (errors) {
-        console.error('Error updating user:', errors);
-        throw new Error(errors[0].message);
-      }
-      return data as User;
-    } catch (error) {
-      console.error('Failed to update user:', error);
-      throw error;
-    }
-  }
-
-  async getUserById(id: string): Promise<User | null> {
-    try {
-      const { data, errors } = await this.client.models.User.get({ id });
-      if (errors) {
-        console.error('Error fetching user:', errors);
-        return null;
-      }
-      return data as User || null;
-    } catch (error) {
-      console.error('Failed to fetch user:', error);
+      const resp = await client.models.User.update({ id, ...updates } as any);
+      const updated = resp.data as UserProfile;
+      if (this.currentUserSignal()?.id === id) this.emitUser(updated);
+      return updated;
+    } catch (err) {
+      console.error('updateUser error', err);
       return null;
     }
   }
 
-  async getCurrentUserProfile(): Promise<User | null> {
+  async getUserById(id: string): Promise<UserProfile | null> {
     try {
-      const userId = await this.getCurrentUserId();
-      return await this.getUserById(userId);
-    } catch (error) {
-      console.error('Failed to fetch current user profile:', error);
+      const resp = await client.models.User.get({ id });
+      return resp.data ?? null;
+    } catch (err) {
+      console.error('getUserById error', err);
       return null;
     }
   }
 
-  async listUsers(): Promise<User[]> {
-    try {
-      const { data, errors } = await this.client.models.User.list();
-      if (errors) {
-        console.error('Error listing users:', errors);
-        return [];
-      }
-      return data as User[];
-    } catch (error) {
-      console.error('Failed to list users:', error);
-      return [];
-    }
+  async getCurrentUserProfile(): Promise<UserProfile | null> {
+    return this.currentUserSignal();
+  }
+
+  async listUsers(limit = 50): Promise<UserProfile[]> {
+    const resp = await client.models.User.list({ limit });
+    return resp.data ?? [];
   }
 
   async deleteUser(id: string): Promise<boolean> {
     try {
-      const { errors } = await this.client.models.User.delete({ id });
-      if (errors) {
-        console.error('Error deleting user:', errors);
-        return false;
-      }
+      await client.models.User.delete({ id });
+      if (this.currentUserSignal()?.id === id) this.emitUser(null);
       return true;
-    } catch (error) {
-      console.error('Failed to delete user:', error);
+    } catch (err) {
+      console.error('deleteUser error', err);
       return false;
     }
   }
 
-  async getUserIdentity(): Promise<string> {
+  async getUserIdentity(): Promise<string | null> {
     try {
-      const sub = await this.getCurrentUserId();
-      const email = await this.getCurrentUserEmail();
-      return `${sub}::${email}`;
-    } catch (error) {
-      console.error('Failed to get user identity:', error);
-      throw error;
+      const { userId } = await getCurrentUser().catch(() => ({} as any));
+      if (userId) return userId;
+      return this.currentUserSignal()?.id ?? null;
+    } catch {
+      return this.currentUserSignal()?.id ?? null;
     }
-  }
-
-  getUserSub(): Observable<string | null> {
-    return this.userSubject.asObservable().pipe(map((user) => user?.id || null));
-  }
-
-  getUserEmail(): Observable<string | null> {
-    return this.userSubject.asObservable().pipe(map((user) => user?.email || null));
   }
 }

@@ -1,16 +1,6 @@
 
 // src/app/core/models/financial.model.ts
 
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  role?: 'Employee' | 'Manager' | 'Admin' | null;
-  rate: number;
-  otMultiplier?: number;  // Added
-  taxRate?: number;  // Added
-}
-
 export interface ChargeCode {
   name: string;
   createdBy: string;
@@ -27,7 +17,7 @@ export interface Account {
   endingBalance: number | null;
   date: string;
   type: 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Expense' | null;
-  chargeCodes: ChargeCode[]; 
+  chargeCodes: ChargeCode[];
 }
 
 export interface Transaction {

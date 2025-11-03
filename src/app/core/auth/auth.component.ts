@@ -2,16 +2,14 @@
 // src/app/core/auth/auth.component.ts
 
 import { Component, inject, signal } from '@angular/core';
-import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
+import { FormBuilder, Validators, ReactiveFormsModule } from '@angular/forms';
+import { CommonModule } from '@angular/common';
+import { Router } from '@angular/router';
+import { AuthService } from '../services/auth.service';
+import type { UserProfile } from '../models/user.model';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
-import { Router } from '@angular/router';
-import { AuthService } from '../../core/services/auth.service';  
-import { User } from '../../core/models/financial.model';  
-import { CommonModule } from '@angular/common';
-
-type AuthState = 'idle' | 'signup' | 'confirmSignup' | 'signin' | 'newPassword' | 'success';
 
 @Component({
   selector: 'app-auth',
@@ -20,44 +18,36 @@ type AuthState = 'idle' | 'signup' | 'confirmSignup' | 'signin' | 'newPassword' 
   templateUrl: './auth.component.html',
 })
 export class AuthComponent {
-  authState = signal<AuthState>('idle');
-  currentEmail = signal<string>(''); 
-  loginForm: FormGroup;
-  signupForm: FormGroup;
-  confirmForm: FormGroup;
-  newPasswordForm: FormGroup;
+  private fb = inject(FormBuilder);
+  private router = inject(Router);
+  private authService = inject(AuthService);
+  authState = signal<'signin' | 'signup' | 'confirmSignup' | 'newPassword'>('signin');
+  currentEmail = signal<string>('');
   error: string | null = null;
   success: string | null = null;
 
-  private fb = inject(FormBuilder);
-  private authService = inject(AuthService);
-  private router = inject(Router);
-
-  constructor() {
-    this.loginForm = this.fb.group({
-      email: ['', [Validators.required, Validators.email]],
-      password: ['', Validators.required],
-    });
-    this.signupForm = this.fb.group({
-      email: ['', [Validators.required, Validators.email]],
-      password: ['', [Validators.required, Validators.minLength(8)]],
-    });
-    this.confirmForm = this.fb.group({
-      code: ['', Validators.required],
-    });
-    this.newPasswordForm = this.fb.group({
-      newPassword: ['', [Validators.required, Validators.minLength(8)]],
-    });
-  }
+  loginForm = this.fb.group({
+    email: ['', [Validators.required, Validators.email]],
+    password: ['', [Validators.required, Validators.minLength(8)]],
+  });
+  signupForm = this.fb.group({
+    email: ['', [Validators.required, Validators.email]],
+    password: ['', [Validators.required, Validators.minLength(8)]],
+  });
+  confirmForm = this.fb.group({
+    code: ['', [Validators.required]],
+  });
+  newPasswordForm = this.fb.group({
+    newPassword: ['', [Validators.required, Validators.minLength(8)]],
+  });
 
   toggleMode() {
-    const newState = this.authState() === 'signup' ? 'signin' : 'signup';
-    this.authState.set(newState);
     this.error = null;
     this.success = null;
+    this.authState.set(this.authState() === 'signup' ? 'signin' : 'signup');
   }
 
-  get currentForm(): FormGroup {
+  get currentForm() {
     switch (this.authState()) {
       case 'confirmSignup': return this.confirmForm;
       case 'newPassword': return this.newPasswordForm;
@@ -66,7 +56,7 @@ export class AuthComponent {
     }
   }
 
-  getSubmitLabel(): string {
+  getSubmitLabel() {
     switch (this.authState()) {
       case 'signup': return 'Sign Up';
       case 'confirmSignup': return 'Confirm';
@@ -78,23 +68,14 @@ export class AuthComponent {
 
   onSubmit() {
     const form = this.currentForm;
-    if (form.valid) {
-      this.error = null;
-      const formValue = form.value;
-      switch (this.authState()) {
-        case 'signup':
-          this.handleSignup(formValue);
-          break;
-        case 'confirmSignup':
-          this.handleConfirmSignup(formValue);
-          break;
-        case 'signin':
-          this.handleSignin(formValue);
-          break;
-        case 'newPassword':
-          this.handleNewPassword(formValue);
-          break;
-      }
+    if (!form.valid) return;
+    this.error = null;
+    const val = form.value;
+    switch (this.authState()) {
+      case 'signup': return this.handleSignup(val);
+      case 'confirmSignup': return this.handleConfirmSignup(val);
+      case 'signin': return this.handleSignin(val);
+      case 'newPassword': return this.handleNewPassword(val);
     }
   }
 
@@ -102,72 +83,45 @@ export class AuthComponent {
     this.currentEmail.set(email);
     this.authService.signUp(email, password).subscribe({
       next: () => {
-        this.success = 'Signup successful! Check your email for confirmation code.';
+        this.success = 'Signup successful. Check your email for the code.';
         this.authState.set('confirmSignup');
       },
       error: (err) => {
-        console.error('Signup error:', err);
-        this.error = err.message || 'Signup failed.';
-      },
+        this.error = (err as Error)?.message ?? String(err);
+      }
     });
   }
 
   private handleConfirmSignup({ code }: any) {
     this.authService.confirmSignUp(this.currentEmail(), code).subscribe({
       next: () => {
-        this.success = 'Account confirmed! Please sign in.';
+        this.success = 'Confirmed. Please sign in.';
         this.authState.set('signin');
       },
-      error: (err) => {
-        console.error('Confirm signup error:', err);
-        this.error = err.message || 'Confirmation failed.';
-      },
+      error: (err) => this.error = (err as Error)?.message ?? String(err)
     });
   }
 
   private handleSignin({ email, password }: any) {
-    this.currentEmail.set(email);
     this.authService.signIn(email, password).subscribe({
-      next: (result) => {
+      next: (result: any) => {
         if (result.isSignedIn) {
-          this.handleSuccess(result);
-        } else if (result.nextStep?.signInStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED') {
+          this.router.navigate(['/start']);
+        } else {
           this.authState.set('newPassword');
           this.success = 'Please set a new permanent password.';
-        } else {
-          this.error = `Unexpected step: ${result.nextStep?.signInStep}`;
         }
       },
-      error: (err) => {
-        console.error('Signin error:', err);
-        this.error = err.message || 'Sign-in failed.';
-      },
+      error: (err) => this.error = (err as Error)?.message ?? String(err)
     });
   }
 
   private handleNewPassword({ newPassword }: any) {
     this.authService.confirmSignIn(newPassword).subscribe({
-      next: (user) => this.handleSuccess(user),
-      error: (err) => {
-        console.error('New password error:', err);
-        this.error = err.message || 'Password update failed.';
+      next: () => {
+        this.router.navigate(['/start']);
       },
+      error: (err) => this.error = (err as Error)?.message ?? String(err)
     });
   }
-
-private handleSuccess(user: User) {
-  this.authService.getUserById(user.id).then(existing => {
-    if (!existing) {
-      return this.authService.createUser(user);
-    }
-    return existing;
-  }).then(() => {
-    console.log('User sync complete');
-    this.router.navigate(['/start']);
-  }).catch(err => {
-    console.error('User sync error:', err);
-    this.error = 'Failed to sync user profile.';
-  });
-}
-
 }

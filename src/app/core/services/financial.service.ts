@@ -1,13 +1,15 @@
 
 // src/app/core/services/financial.service.ts
 
+// src/app/core/services/financial.service.ts
 import { Injectable, inject } from '@angular/core';
 import { generateClient } from 'aws-amplify/data';
 import { firstValueFrom } from 'rxjs';
 import { v4 as uuidv4 } from 'uuid';
 import type { Schema } from '../../../../amplify/data/resource';
-import { Account, Transaction, AccountModel, TransactionModel, User, ChargeCode } from '../models/financial.model';
+import { Account, Transaction, AccountModel, TransactionModel, ChargeCode } from '../models/financial.model';
 import { AuthService } from './auth.service';
+import { UserProfile } from '../models/user.model';
 
 @Injectable({ providedIn: 'root' })
 export class FinancialService {
@@ -229,20 +231,20 @@ export class FinancialService {
     return account.chargeCodes ?? [];
   }
 
-  async listUsers(): Promise<User[]> {
+  async listUsers(): Promise<UserProfile[]> {
     try {
       const { data, errors } = await this.client.models.User.list();
       if (errors?.length) {
         throw new Error(`Failed to list users: ${errors.map(e => e.message).join(', ')}`);
       }
-      return data as User[];
+      return data as UserProfile[];
     } catch (error) {
       console.error('Error listing users:', error);
       throw error;
     }
   }
 
-  async createUserIfNotExists(user: User): Promise<void> {
+  async createUserIfNotExists(user: UserProfile): Promise<void> {
     try {
       await this.getUserById(user.id);
       console.log('User already exists:', user.id);
@@ -252,10 +254,10 @@ export class FinancialService {
     }
   }
 
-  async getUserById(id: string): Promise<User> {
+  async getUserById(id: string): Promise<UserProfile> {
     const { data } = await this.client.models.User.get({ id });
     if (!data) throw new Error(`User with id ${id} not found`);
-    return data as User;
+    return data as UserProfile;
   }
 
   async addFunds(accountId: string, amount: number, description: string = 'Add funds'): Promise<Transaction> {

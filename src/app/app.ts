@@ -24,6 +24,7 @@ export class AppComponent implements OnInit {
         this.router.navigate([user ? '/start' : '/auth']);
       },
       error: () => this.router.navigate(['/auth']),
+
     });
   }
 }

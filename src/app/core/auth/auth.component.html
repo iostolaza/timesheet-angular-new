@@ -4,68 +4,66 @@
   <h1 class="text-3xl font-bold text-center mb-6">
     {{ authState() === 'signup' || authState() === 'confirmSignup' ? 'Sign Up' : 'Login' }}
   </h1>
-  
-  @if (authState() !== 'success') {
-    <button type="button" mat-button (click)="toggleMode()" class="w-full mb-4 text-sm">
-      Switch to {{ authState() === 'signup' ? 'Login' : 'Sign Up' }}
+
+  <button type="button" mat-button (click)="toggleMode()" class="w-full mb-4 text-sm">
+    Switch to {{ authState() === 'signup' ? 'Login' : 'Sign Up' }}
+  </button>
+
+  <form [formGroup]="currentForm" (ngSubmit)="onSubmit()" class="space-y-4">
+    @if (authState() === 'signin' || authState() === 'signup') {
+      <mat-form-field appearance="fill" class="w-full">
+        <mat-label>Email</mat-label>
+        <input matInput formControlName="email" required>
+        <mat-error *ngIf="$any(currentForm).get('email')?.hasError('required')">
+          Email is required
+        </mat-error>
+        <mat-error *ngIf="$any(currentForm).get('email')?.hasError('email')">
+          Invalid email format
+        </mat-error>
+      </mat-form-field>
+
+      <mat-form-field appearance="fill" class="w-full">
+        <mat-label>{{ authState() === 'signup' ? 'Password' : 'Password' }}</mat-label>
+        <input matInput type="password" formControlName="password" required>
+        <mat-error *ngIf="$any(currentForm).get('password')?.hasError('required')">
+          Password is required
+        </mat-error>
+        <mat-error *ngIf="$any(currentForm).get('password')?.hasError('minlength')">
+          Password must be at least 8 characters
+        </mat-error>
+      </mat-form-field>
+    }
+
+    @if (authState() === 'confirmSignup') {
+      <mat-form-field appearance="fill" class="w-full">
+        <mat-label>Confirmation Code</mat-label>
+        <input matInput formControlName="code" required>
+        <mat-error *ngIf="$any(currentForm).get('code')?.hasError('required')">
+          Code is required
+        </mat-error>
+      </mat-form-field>
+      <p class="text-sm text-gray-600">Enter the 6-digit code sent to {{ currentEmail() }}</p>
+    }
+
+    @if (authState() === 'newPassword') {
+      <mat-form-field appearance="fill" class="w-full">
+        <mat-label>New Password</mat-label>
+        <input matInput type="password" formControlName="newPassword" required>
+        <mat-error *ngIf="$any(currentForm).get('newPassword')?.hasError('required')">
+          New password is required
+        </mat-error>
+        <mat-error *ngIf="$any(currentForm).get('newPassword')?.hasError('minlength')">
+          New password must be at least 8 characters
+        </mat-error>
+      </mat-form-field>
+    }
+
+    <button mat-raised-button color="primary" type="submit"
+            [disabled]="currentForm.invalid" class="w-full">
+      {{ getSubmitLabel() }}
     </button>
-    
-    <form [formGroup]="currentForm" (ngSubmit)="onSubmit()" class="space-y-4">
-      @if (authState() === 'signin' || authState() === 'signup') {
-        <mat-form-field appearance="fill" class="w-full">
-          <mat-label>Email</mat-label>
-          <input matInput formControlName="email" required>
-          <mat-error *ngIf="currentForm.get('email')?.hasError('required')">
-            Email is required
-          </mat-error>
-          <mat-error *ngIf="currentForm.get('email')?.hasError('email')">
-            Invalid email format
-          </mat-error>
-        </mat-form-field>
-        
-        <mat-form-field appearance="fill" class="w-full">
-          <mat-label>{{ authState() === 'signup' ? 'Password' : 'Password' }}</mat-label>
-          <input matInput type="password" formControlName="password" required>
-          <mat-error *ngIf="currentForm.get('password')?.hasError('required')">
-            Password is required
-          </mat-error>
-          <mat-error *ngIf="currentForm.get('password')?.hasError('minlength')">
-            Password must be at least 8 characters
-          </mat-error>
-        </mat-form-field>
-      }
-      
-      @if (authState() === 'confirmSignup') {
-        <mat-form-field appearance="fill" class="w-full">
-          <mat-label>Confirmation Code</mat-label>
-          <input matInput formControlName="code" required>
-          <mat-error *ngIf="currentForm.get('code')?.hasError('required')">
-            Code is required
-          </mat-error>
-        </mat-form-field>
-        <p class="text-sm text-gray-600">Enter the 6-digit code sent to {{ currentEmail() }}</p>
-      }
-      
-      @if (authState() === 'newPassword') {
-        <mat-form-field appearance="fill" class="w-full">
-          <mat-label>New Password</mat-label>
-          <input matInput type="password" formControlName="newPassword" required>
-          <mat-error *ngIf="currentForm.get('newPassword')?.hasError('required')">
-            New password is required
-          </mat-error>
-          <mat-error *ngIf="currentForm.get('newPassword')?.hasError('minlength')">
-            New password must be at least 8 characters
-          </mat-error>
-        </mat-form-field>
-      }
-      
-      <button mat-raised-button color="primary" type="submit" 
-              [disabled]="currentForm.invalid" class="w-full">
-        {{ getSubmitLabel() }}
-      </button>
-    </form>
-  }
-  
+  </form>
+
   @if (error) {
     <p class="error mt-4 text-red-600 text-center">{{ error }}</p>
   }

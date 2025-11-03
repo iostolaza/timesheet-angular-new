@@ -4,12 +4,10 @@
 import { Injectable, inject } from '@angular/core';
 import { generateClient } from 'aws-amplify/data';
 import type { Schema } from '../../../../amplify/data/resource';
-import { firstValueFrom } from 'rxjs';
 import { AuthService } from './auth.service';
 import { FinancialService } from './financial.service';
 import { Timesheet, TimesheetEntry, DailyAggregate } from '../models/timesheet.model';
 import { ChargeCode } from '../models/financial.model';
-import { addDays, startOfWeek } from 'date-fns';
 
 @Injectable({
   providedIn: 'root'
@@ -81,7 +79,7 @@ export class TimesheetService {
   }
 
   async listTimesheets(status?: 'draft' | 'submitted' | 'approved' | 'rejected'): Promise<Timesheet[]> {
-    const sub = await firstValueFrom(this.authService.getUserSub());
+    const sub = await this.authService.getUserIdentity();
     const query: any = { filter: { owner: { eq: sub! } } };
     if (status) query.filter.status = { eq: status };
     const { data, errors } = await this.client.models.Timesheet.list(query);

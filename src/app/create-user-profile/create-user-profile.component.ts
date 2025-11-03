@@ -4,7 +4,7 @@ import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../core/services/auth.service';
-import { User } from '../core/models/financial.model';
+import { UserProfile } from '../core/models/user.model';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
@@ -69,7 +69,7 @@ export class CreateUserProfileComponent implements OnInit {
     try {
       const formValue = this.userForm.getRawValue();
       
-      const newUser: Omit<User, 'owner'> = {
+      const newUser: Partial<UserProfile> = {
         id: formValue.id,
         email: formValue.email,
         name: formValue.name,
