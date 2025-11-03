@@ -40,7 +40,7 @@ export class ChargeCodeSearchDialogComponent implements OnInit {
   }
 
   private filterCodes(value: string): ChargeCode[] {
-    const filterValue = value.toLowerCase();
+    const filterValue = (typeof value === 'string' ? value.toLowerCase() : '');
     return this.data.chargeCodes.filter(code => code.name.toLowerCase().includes(filterValue));
   }
 

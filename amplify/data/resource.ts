@@ -65,7 +65,7 @@ const schema = a.schema({
       totalCost: a.float(),
       owner: a.string().required(),
       rejectionReason: a.string(),
-      associatedChargeCodesJson: a.string().required(),
+      associatedChargeCodesJson: a.string(),
       dailyAggregatesJson: a.string(), 
       grossTotal: a.float(),
       taxAmount: a.float(),

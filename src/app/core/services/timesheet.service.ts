@@ -176,6 +176,9 @@ export class TimesheetService {
     }
 
     const user = await this.authService.getUserById(tsWithEntries.owner);
+    if (user === null) {
+     throw new Error(`User with id ${tsWithEntries.owner} not found`);
+     }
     let totalCost = 0;
     for (const entry of tsWithEntries.entries) {
       const account = await this.financialService.getAccountByNumber(entry.chargeCode);
@@ -276,6 +279,9 @@ export class TimesheetService {
   private async updateTotals(id: string): Promise<void> {
     const tsWithEntries = await this.getTimesheetWithEntries(id);
     const user = await this.authService.getUserById(tsWithEntries.owner);
+    if (user === null) {
+    throw new Error(`User with id ${tsWithEntries.owner} not found`);
+    }
     const { dailyAggregates, grossTotal, taxAmount, netTotal } = await this.calculateAggregates(
       tsWithEntries.entries,
       user.rate,

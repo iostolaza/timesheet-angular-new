@@ -7,8 +7,8 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { Router } from '@angular/router';
-import { AuthService } from '../../core/services/auth.service';  // Removed: No CognitoUser needed
-import { User } from '../../core/models/financial.model';  // Added: For type in handleSuccess
+import { AuthService } from '../../core/services/auth.service';  
+import { User } from '../../core/models/financial.model';  
 import { CommonModule } from '@angular/common';
 
 type AuthState = 'idle' | 'signup' | 'confirmSignup' | 'signin' | 'newPassword' | 'success';
@@ -21,7 +21,7 @@ type AuthState = 'idle' | 'signup' | 'confirmSignup' | 'signin' | 'newPassword' 
 })
 export class AuthComponent {
   authState = signal<AuthState>('idle');
-  currentEmail = signal<string>('');  // Track email across steps
+  currentEmail = signal<string>(''); 
   loginForm: FormGroup;
   signupForm: FormGroup;
   confirmForm: FormGroup;
@@ -155,10 +155,19 @@ export class AuthComponent {
     });
   }
 
-  private handleSuccess(user: User) {  // Updated: Type as schema User
-    this.authService.createUserIfNotExists(user).then(() => {  // Pass full User
-      console.log('User sync complete');
-      this.router.navigate(['/start']);
-    });
-  }
+private handleSuccess(user: User) {
+  this.authService.getUserById(user.id).then(existing => {
+    if (!existing) {
+      return this.authService.createUser(user);
+    }
+    return existing;
+  }).then(() => {
+    console.log('User sync complete');
+    this.router.navigate(['/start']);
+  }).catch(err => {
+    console.error('User sync error:', err);
+    this.error = 'Failed to sync user profile.';
+  });
+}
+
 }
