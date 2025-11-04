@@ -314,7 +314,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
           if (weeklyTotal > 40) console.warn('Weekly hours exceed 40');
 
           await this.tsService.updateEntry(result, timesheetId);
-          this.events.update(events => 
+          this.events.update(events =>
             events.map(e => (e.id === result.id ? result : e))
           );
           this.updateSummary();
