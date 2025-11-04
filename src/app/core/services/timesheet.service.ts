@@ -27,9 +27,9 @@ export class TimesheetService {
       rejectionReason: data.rejectionReason ?? undefined,
       associatedChargeCodes: data.associatedChargeCodesJson ? JSON.parse(data.associatedChargeCodesJson) : [],
       dailyAggregates: data.dailyAggregatesJson ? JSON.parse(data.dailyAggregatesJson) : undefined,
-      grossTotal: data.grossTotal,
-      taxAmount: data.taxAmount,
-      netTotal: data.netTotal,
+      grossTotal: data.grossTotal ?? 0,
+      taxAmount: data.taxAmount ?? 0,
+      netTotal: data.netTotal ?? 0,
       entries: [],
     };
   }
@@ -40,8 +40,9 @@ export class TimesheetService {
     }
     const { data, errors } = await this.client.models.Timesheet.create({
        ...ts, 
-       associatedChargeCodesJson: JSON.stringify([]),  
-        });
+       associatedChargeCodesJson: JSON.stringify(ts.associatedChargeCodes ?? []),  
+       dailyAggregatesJson: JSON.stringify(ts.dailyAggregates ?? []),
+    });
     if (errors?.length) {
       console.error('Failed to create timesheet', errors);
       throw new Error(`Failed to create timesheet: ${errors.map(e => e.message).join(', ')}`);
@@ -290,7 +291,7 @@ export class TimesheetService {
     const { data, errors } = await this.client.models.Timesheet.update({
       id,
       totalHours,
-      dailyAggregatesJson: JSON.stringify(dailyAggregates),
+      dailyAggregatesJson: JSON.stringify(dailyAggregates) || '[]',
       grossTotal,
       taxAmount,
       netTotal,

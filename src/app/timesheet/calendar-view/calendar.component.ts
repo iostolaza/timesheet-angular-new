@@ -1,7 +1,6 @@
 
 // src/app/timesheet/calendar-view/calendar.component.ts
 
-// src/app/timesheet/calendar-view/calendar.component.ts
 import {
   Component,
   inject,
@@ -84,7 +83,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
               title: `${entry.chargeCode || 'Unassigned'}:  \n ${entry.description}`,
               start: `${entry.date}T${entry.startTime}`,
               end: `${entry.date}T${entry.endTime}`,
-              backgroundColor: '#32a852',
+              backgroundColor: '#00B0FF',
               borderColor: '#00B0FF',
               extendedProps: { entry },
             }))
@@ -315,7 +314,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
           if (weeklyTotal > 40) console.warn('Weekly hours exceed 40');
 
           await this.tsService.updateEntry(result, timesheetId);
-          this.events.update(events =>
+          this.events.update(events => 
             events.map(e => (e.id === result.id ? result : e))
           );
           this.updateSummary();
@@ -458,7 +457,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
     });
     if (dailyExceed.length > 0) msg += 'Daily hours exceed 8h; ';
     if (this.weeklyTotal() > 40) msg += 'Weekly hours exceed 40h. ';
-    const hasUnassignedChargeCode = allEntries.some(e => e.chargeCode === 'Unassigned');
+    const hasUnassignedChargeCode = allEntries.some(e => e.chargeCode === 'Unassigned' || e.chargeCode === ' ');
     if (hasUnassignedChargeCode) msg += 'All entries must have a valid charge code; ';
     this.validationMessage.set(msg);
     if (msg) this.snackBar.open(msg, 'OK', { duration: 5000 });
@@ -475,12 +474,14 @@ export class CalendarComponent implements OnInit, AfterViewInit {
       const timesheetId = this.currentTimesheetId();
       if (!timesheetId) throw new Error('No timesheet ID available');
       const sub = await this.authService.getUserIdentity();
+      const uniqueChargeCodes = [...new Set(this.events().map(e => e.chargeCode))].map(code => ({ name: code, createdBy: sub ?? 'system', date: new Date().toISOString() }));
       const tsData = {
         id: timesheetId,
         totalHours: this.weeklyTotal(),
         totalCost: this.totalCost(),
         status: 'submitted' as const,
         owner: sub ?? 'default-user',
+        associatedChargeCodes: uniqueChargeCodes,
       };
       await this.tsService.updateTimesheet(tsData);
       this.events.set([]);
@@ -516,12 +517,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
         if (selectedCode) {
           console.log('Charge code selected', { code: selectedCode.name });
           this.snackBar.open(`Selected charge code: ${selectedCode.name}`, 'OK', { duration: 2000 });
-          const timesheetId = this.currentTimesheetId();
-          if (timesheetId) {
-            const updatedTs = await this.tsService.addAssociatedChargeCode(timesheetId, selectedCode);
-            this.associatedChargeCodes.set(updatedTs.associatedChargeCodes || []);
-            this.chargeCodes.update(codes => [...new Set([...codes, selectedCode])]);
-          }
+          this.associatedChargeCodes.update(codes => [...new Set([...codes, selectedCode])]);
           this.cdr.markForCheck();
         }
       });

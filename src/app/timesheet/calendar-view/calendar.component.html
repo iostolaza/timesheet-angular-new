@@ -1,7 +1,5 @@
 
-
 <!-- src/app/timesheet/calendar-view/calendar.component.html -->
-
 <div class="container mx-auto p-4 max-w-6xl">
   <div class="flex justify-between items-center mb-6">
     <div>
@@ -42,7 +40,7 @@
       </div>
     }
     <div class="text-center">
-      <button mat-raised-button color="primary" (click)="submitTimesheet()" [disabled]="!isValid()" class="px-8 py-2">
+      <button (click)="submitTimesheet()" [disabled]="!isValid()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg">
         Submit Timesheet
       </button>
     </div>
