@@ -1,13 +1,18 @@
+
 // src/app/app.routes.ts
 
-import { Routes } from '@angular/router';
+import { Routes, CanActivateFn } from '@angular/router';
 import { inject } from '@angular/core';
-import { firstValueFrom, from } from 'rxjs';
 import { AuthService } from './core/services/auth.service';
+import { firstValueFrom } from 'rxjs';
+import { Router } from '@angular/router';
 
-const authGuard = () => {
-  const authService = inject(AuthService);
-  return () => firstValueFrom(authService.getCurrentUser()).then(user => user ? true : '/auth');
+const authGuard: CanActivateFn = () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+  return firstValueFrom(auth.getCurrentUser()).then(user => 
+    user ? true : router.createUrlTree(['/auth'])
+  );
 };
 
 export const routes: Routes = [

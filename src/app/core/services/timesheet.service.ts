@@ -79,7 +79,7 @@ export class TimesheetService {
   }
 
   async listTimesheets(status?: 'draft' | 'submitted' | 'approved' | 'rejected'): Promise<Timesheet[]> {
-    const sub = await this.authService.getUserIdentity();
+    const sub = await this.authService.getCurrentUserId();
     const query: any = { filter: { owner: { eq: sub! } } };
     if (status) query.filter.status = { eq: status };
     const { data, errors } = await this.client.models.Timesheet.list(query);

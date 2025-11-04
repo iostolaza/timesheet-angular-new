@@ -125,18 +125,18 @@ export class CalendarComponent implements OnInit, AfterViewInit {
 
   async ngOnInit() {
     try {
-      this.authService.getCurrentUserEmail().then(email => {
+      const email = this.authService.getCurrentUserSync()?.email ?? '';
         if (email) {
           this.userEmail.set(email);
           this.cdr.markForCheck();
         }
-      });
+    
 
       const start = startOfWeek(this.today, { weekStartsOn: 0 });
       const end = endOfWeek(this.today, { weekStartsOn: 0 });
       this.weekRange.set(`${format(start, 'MMM d')} – ${format(end, 'd, yyyy')}`);
 
-      const sub = await this.authService.getUserIdentity();
+      const sub = await this.authService.getCurrentUserId();
       const timesheet = await this.tsService.createTimesheet({
         status: 'draft',
         totalHours: 0,
@@ -216,7 +216,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
       const endStr = info.endStr.split('T')[1].substring(0, 5);
       const hours = this.computeHoursDiff(info.start, info.end);
 
-      const sub = await this.authService.getUserIdentity();
+      const sub = await this.authService.getCurrentUserId();
       const timesheetId = this.currentTimesheetId();
       if (!timesheetId) throw new Error('No timesheet ID available');
 
@@ -473,7 +473,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
     try {
       const timesheetId = this.currentTimesheetId();
       if (!timesheetId) throw new Error('No timesheet ID available');
-      const sub = await this.authService.getUserIdentity();
+      const sub = await this.authService.getCurrentUserId();
       const uniqueChargeCodes = [...new Set(this.events().map(e => e.chargeCode))].map(code => ({ name: code, createdBy: sub ?? 'system', date: new Date().toISOString() }));
       const tsData = {
         id: timesheetId,

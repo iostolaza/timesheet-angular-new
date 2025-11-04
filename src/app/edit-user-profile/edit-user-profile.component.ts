@@ -42,7 +42,7 @@ export class EditUserProfileComponent implements OnInit {
     this.loading = true;
     
     try {
-      this.currentUser = await this.authService.getCurrentUserProfile();
+      this.currentUser = await this.authService.getCurrentUserSync();
       
       if (!this.currentUser) {
         this.errorMessage = 'User profile not found. Please create your profile first.';

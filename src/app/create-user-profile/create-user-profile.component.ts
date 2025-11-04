@@ -40,7 +40,7 @@ export class CreateUserProfileComponent implements OnInit {
   async ngOnInit() {
     try {
       const userId = await this.authService.getCurrentUserId();
-      const email = await this.authService.getCurrentUserEmail();
+      const email = this.authService.getCurrentUserSync()?.email ?? '';
 
       this.userForm = this.fb.group({
         id: [userId, Validators.required],
