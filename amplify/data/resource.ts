@@ -67,7 +67,7 @@ const schema = a.schema({
       owner: a.string().required(),
       rejectionReason: a.string(),
       associatedChargeCodesJson: a.string().default('[]'),
-      dailyAggregatesJson: a.string().default('[]'), 
+      dailyAggregatesJson: a.string().default('[]'),
       grossTotal: a.float(),
       taxAmount: a.float(),
       netTotal: a.float(),
@@ -105,6 +105,7 @@ export const data = defineData({
     defaultAuthorizationMode: 'userPool',
   },
 });
+
 
 /*== STEP 2 ===============================================================
 Go to your frontend source code. From your client-side code, generate a
