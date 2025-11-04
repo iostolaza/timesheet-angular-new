@@ -1,6 +1,4 @@
-
-// src/app/core/services/timesheet.service.ts
-
+// file: src/app/core/services/timesheet.service.ts
 import { Injectable, inject } from '@angular/core';
 import { generateClient } from 'aws-amplify/data';
 import type { Schema } from '../../../../amplify/data/resource';
@@ -17,23 +15,13 @@ export class TimesheetService {
   private authService = inject(AuthService);
   private financialService = inject(FinancialService);
 
-
   private mapTimesheetFromSchema(data: any): Timesheet {
-    // defensive: if somehow data.associatedChargeCodesJson is null, coerce to '[]'
     const assocJsonRaw = data?.associatedChargeCodesJson ?? '[]';
     const dailyAggRaw = data?.dailyAggregatesJson ?? '[]';
     let parsedAssoc: ChargeCode[] = [];
     let parsedDaily: DailyAggregate[] = [];
-    try {
-      parsedAssoc = JSON.parse(assocJsonRaw);
-    } catch (err) {
-      parsedAssoc = [];
-    }
-    try {
-      parsedDaily = JSON.parse(dailyAggRaw);
-    } catch (err) {
-      parsedDaily = [];
-    }
+    try { parsedAssoc = JSON.parse(assocJsonRaw); } catch { parsedAssoc = []; }
+    try { parsedDaily = JSON.parse(dailyAggRaw); } catch { parsedDaily = []; }
 
     return {
       id: data.id,
@@ -47,31 +35,37 @@ export class TimesheetService {
       grossTotal: data.grossTotal ?? 0,
       taxAmount: data.taxAmount ?? 0,
       netTotal: data.netTotal ?? 0,
+      startDate: data.startDate ?? undefined,
+      endDate: data.endDate ?? undefined,
       entries: [],
     };
   }
 
-  // --- Draft creation integration ---
-  async ensureDraftTimesheet(): Promise<Timesheet> {
+  async ensureDraftTimesheet(startDate: string, endDate: string): Promise<Timesheet> {  
     const sub = await this.authService.getCurrentUserId();
     if (!sub) throw new Error('User not authenticated');
 
-    // IMPORTANT: If GraphQL throws on list because of DB null values, this call will fail;
-    // run the migration script to fix data and then rely on the API.
-    const { data } = await this.client.models.Timesheet.list({
-      filter: { owner: { eq: sub }, status: { eq: 'draft' } },
-    });
+    const filter = { 
+      owner: { eq: sub }, 
+      status: { eq: 'draft' },
+      startDate: { eq: startDate }, 
+      endDate: { eq: endDate },
+    };
+
+    const { data } = await this.client.models.Timesheet.list({ filter });
 
     if (data && data.length > 0) {
-      console.log('Found existing draft timesheet', data[0].id);
+      console.log('Found existing draft timesheet for period', data[0].id);
       return this.mapTimesheetFromSchema(data[0]);
     }
 
-    console.log('No draft found, creating a new one...');
+    console.log('No draft found for period, creating a new one...');
     return await this.createTimesheet({
       owner: sub,
       totalHours: 0,
       status: 'draft',
+      startDate,
+      endDate,
     });
   }
 
@@ -106,14 +100,15 @@ export class TimesheetService {
     return this.mapTimesheetFromSchema(data);
   }
 
-  async listTimesheets(status?: 'draft' | 'submitted' | 'approved' | 'rejected'): Promise<Timesheet[]> {
+  async listTimesheets(status?: 'draft' | 'submitted' | 'approved' | 'rejected', startDate?: string, endDate?: string): Promise<Timesheet[]> {
     const sub = await this.authService.getCurrentUserId();
     const filter: any = { owner: { eq: sub! } };
     if (status) filter.status = { eq: status };
+    if (startDate) filter.startDate = { eq: startDate };
+    if (endDate) filter.endDate = { eq: endDate };
 
     const { data, errors } = await this.client.models.Timesheet.list({ filter });
     if (errors?.length) throw new Error(errors.map(e => e.message).join(', '));
-    // NOTE: this will not run if GraphQL crashed due to nulls. Run migration first.
     return data.map(this.mapTimesheetFromSchema);
   }
 

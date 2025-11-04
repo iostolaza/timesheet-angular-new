@@ -1,6 +1,4 @@
-
-// src/app/timesheet/calendar-view/calendar.component.ts
-
+// file: src/app/timesheet/calendar-view/calendar.component.ts
 import {
   Component,
   inject,
@@ -29,7 +27,7 @@ import { TimesheetEntry } from '../../core/models/timesheet.model';
 import { ChargeCode } from '../../core/models/financial.model';
 import { DayEntryDialogComponent } from './day-entry-dialog.component';
 import { ChargeCodeSearchDialogComponent } from '../../timesheet/charge-code-search/charge-code-search.component';
-import { format, startOfWeek, endOfWeek } from 'date-fns';
+import { format, startOfMonth, endOfMonth, addDays, parseISO } from 'date-fns';
 
 @Component({
   selector: 'app-calendar',
@@ -59,6 +57,8 @@ export class CalendarComponent implements OnInit, AfterViewInit {
   chargeCodes = signal<ChargeCode[]>([]);
   currentTimesheetId = signal<string | null>(null);
   associatedChargeCodes = signal<ChargeCode[]>([]);
+  periodStart = signal<string>('');
+  periodEnd = signal<string>('');
 
   private tsService = inject(TimesheetService);
   private authService = inject(AuthService);
@@ -107,6 +107,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
     eventClick: this.handleEventClick.bind(this),
     eventDrop: this.handleEventDrop.bind(this),
     eventResize: this.handleEventResize.bind(this),
+    datesSet: this.handleDatesSet.bind(this),
 
     eventOverlap: true,
     slotEventOverlap: false,
@@ -126,35 +127,21 @@ export class CalendarComponent implements OnInit, AfterViewInit {
   async ngOnInit() {
     try {
       const email = this.authService.getCurrentUserSync()?.email ?? '';
-        if (email) {
-          this.userEmail.set(email);
-          this.cdr.markForCheck();
-        }
-    
+      if (email) this.userEmail.set(email);
 
-      const start = startOfWeek(this.today, { weekStartsOn: 0 });
-      const end = endOfWeek(this.today, { weekStartsOn: 0 });
-      this.weekRange.set(`${format(start, 'MMM d')} – ${format(end, 'd, yyyy')}`);
+      const { startStr, endStr } = this.getSemiMonthlyPeriod(this.today);
+      this.periodStart.set(startStr);
+      this.periodEnd.set(endStr);
+      this.weekRange.set(`${format(parseISO(startStr), 'MMM d')} – ${format(parseISO(endStr), 'd, yyyy')}`);
 
-      const sub = await this.authService.getCurrentUserId();
-      const timesheet = await this.tsService.createTimesheet({
-        status: 'draft',
-        totalHours: 0,
-        owner: sub!
-      });
-      const tsWithEntries = await this.tsService.getTimesheetWithEntries(timesheet.id);
-      this.associatedChargeCodes.set(tsWithEntries.associatedChargeCodes || []);
-      this.currentTimesheetId.set(timesheet.id);
-
-      await this.loadChargeCodes();
-      await this.loadEvents();
+      await this.loadDraftAndEvents();
       console.log('Initialized calendar component', {
         userEmail: this.userEmail(),
         timesheetId: this.currentTimesheetId(),
       });
     } catch (error) {
       console.error('Failed to initialize component', error);
-      this.snackBar.open('Failed to initialize timesheet', 'OK', { duration: 5000 });
+      this.openError('Failed to initialize timesheet. Please try again.');
     }
   }
 
@@ -166,6 +153,41 @@ export class CalendarComponent implements OnInit, AfterViewInit {
     }
   }
 
+  handleDatesSet(info: any) {
+    const viewStart = new Date(info.startStr.split('T')[0]);
+    const { startStr, endStr } = this.getSemiMonthlyPeriod(viewStart);
+    if (startStr !== this.periodStart() || endStr !== this.periodEnd()) {
+      this.periodStart.set(startStr);
+      this.periodEnd.set(endStr);
+      this.weekRange.set(`${format(parseISO(startStr), 'MMM d')} – ${format(parseISO(endStr), 'd, yyyy')}`);
+      this.loadDraftAndEvents();
+    }
+  }
+
+  private async loadDraftAndEvents() {
+    const draft = await this.tsService.ensureDraftTimesheet(this.periodStart(), this.periodEnd());
+    this.currentTimesheetId.set(draft.id);
+    this.associatedChargeCodes.set(draft.associatedChargeCodes || []);
+    await this.loadChargeCodes();
+    await this.loadEvents();
+  }
+
+  private getSemiMonthlyPeriod(date: Date): { startStr: string; endStr: string } {
+    const day = date.getDate();
+    const monthStart = startOfMonth(date);
+    if (day <= 15) {
+      return {
+        startStr: format(monthStart, 'yyyy-MM-dd'),
+        endStr: format(addDays(monthStart, 14), 'yyyy-MM-dd'),  // 1-15
+      };
+    } else {
+      return {
+        startStr: format(addDays(monthStart, 15), 'yyyy-MM-dd'),  // 16-EOM
+        endStr: format(endOfMonth(date), 'yyyy-MM-dd'),
+      };
+    }
+  }
+
   private async loadChargeCodes() {
     try {
       const accounts = await this.financialService.listAccounts();
@@ -173,34 +195,28 @@ export class CalendarComponent implements OnInit, AfterViewInit {
       console.log('Loaded charge codes', { count: this.chargeCodes().length });
     } catch (error) {
       console.error('Failed to load charge codes', error);
-      this.snackBar.open('Failed to load charge codes', 'OK', { duration: 5000 });
+      this.openError('Failed to load charge codes. Please refresh.');
     }
   }
 
   async loadEvents() {
     try {
-      const timesheets = await this.tsService.listTimesheets('draft');
-      const allEntries: TimesheetEntry[] = [];
-      for (const ts of timesheets) {
-        const tsWithEntries = await this.tsService.getTimesheetWithEntries(ts.id);
-        allEntries.push(...tsWithEntries.entries);
-      }
-      this.events.set(allEntries);
+      const tsId = this.currentTimesheetId();
+      if (!tsId) throw new Error('No current timesheet ID - reinitialize.');
+
+      const tsWithEntries = await this.tsService.getTimesheetWithEntries(tsId);  
+      this.events.set(tsWithEntries.entries);
       this.updateSummary();
-      console.log('Loaded timesheet events', { count: allEntries.length });
+      console.log('Loaded timesheet events', { count: this.events().length });
       this.cdr.markForCheck();
 
       const calendarApi = this.calendarComponent?.getApi();
       if (calendarApi) {
-        try {
-          calendarApi.refetchEvents();
-        } catch (error) {
-          console.error('Failed to refetch events in loadEvents', error);
-        }
+        calendarApi.refetchEvents();
       }
     } catch (error) {
       console.error('Failed to load events', error);
-      this.snackBar.open('Failed to load events', 'OK', { duration: 5000 });
+      this.openError('Failed to load events. Please refresh.');
     }
   }
 
@@ -246,8 +262,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
       console.log('Added entry', { entryId: savedEntry.id });
     } catch (error: any) {
       console.error('Failed to handle select', error);
-      this.snackBar.open(error.message || 'Failed to create entry', 'OK', { duration: 5000 });
-      // info.revert();
+      this.openError(error.message || 'Failed to create entry. Please try again.');
     } finally {
       this.cdr.markForCheck();
       const calendarApi = this.calendarComponent?.getApi();
@@ -286,7 +301,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
           console.log('Deleted entry', { entryId: entry.id });
         } catch (error: any) {
           console.error('Failed to delete entry', error);
-          this.snackBar.open(error.message || 'Failed to delete entry', 'OK', { duration: 5000 });
+          this.openError(error.message || 'Failed to delete entry. Please try again.');
         } finally {
           this.cdr.markForCheck();
           const calendarApi = this.calendarComponent?.getApi();
@@ -322,7 +337,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
           console.log('Updated entry', { entryId: result.id });
         } catch (error: any) {
           console.error('Failed to update entry', error);
-          this.snackBar.open(error.message || 'Failed to update entry', 'OK', { duration: 5000 });
+          this.openError(error.message || 'Failed to update entry. Please try again.');
         } finally {
           this.cdr.markForCheck();
           const calendarApi = this.calendarComponent?.getApi();
@@ -371,7 +386,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
       console.log('Moved entry', { entryId: entry.id });
     } catch (error: any) {
       console.error('Failed to handle event drop', error);
-      this.snackBar.open(error.message || 'Failed to move entry', 'OK', { duration: 5000 });
+      this.openError(error.message || 'Failed to move entry. Please try again.');
       info.revert();
     } finally {
       this.cdr.markForCheck();
@@ -418,7 +433,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
       console.log('Resized entry', { entryId: entry.id });
     } catch (error: any) {
       console.error('Failed to handle event resize', error);
-      this.snackBar.open(error.message || 'Failed to resize entry', 'OK', { duration: 5000 });
+      this.openError(error.message || 'Failed to resize entry. Please try again.');
       info.revert();
     } finally {
       this.cdr.markForCheck();
@@ -491,7 +506,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
       console.log('Timesheet submitted', { timesheetId });
     } catch (error: any) {
       console.error('Failed to submit timesheet', error);
-      this.snackBar.open(error.message || 'Failed to submit timesheet', 'OK', { duration: 5000 });
+      this.openError(error.message || 'Failed to submit timesheet. Please try again.');
     } finally {
       this.cdr.markForCheck();
       const calendarApi = this.calendarComponent?.getApi();
@@ -523,7 +538,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
       });
     }).catch(error => {
       console.error('Failed to load charge codes for dialog', error);
-      this.snackBar.open('Failed to load charge codes', 'OK', { duration: 5000 });
+      this.openError('Failed to load charge codes. Please refresh.');
     });
   }
 
@@ -542,7 +557,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
       console.log('Deleted entry', { entryId: entry.id });
     } catch (error: any) {
       console.error('Failed to delete entry', error);
-      this.snackBar.open(error.message || 'Failed to delete entry', 'OK', { duration: 5000 });
+      this.openError(error.message || 'Failed to delete entry. Please try again.');
     } finally {
       this.cdr.markForCheck();
       const calendarApi = this.calendarComponent?.getApi();
@@ -554,5 +569,14 @@ export class CalendarComponent implements OnInit, AfterViewInit {
         }
       }
     }
+  }
+
+  private openError(message: string) {
+    this.snackBar.open(message, 'Close', {
+      duration: 7000,
+      horizontalPosition: 'center',
+      verticalPosition: 'top',
+      panelClass: ['error-snack'],
+    });
   }
 }

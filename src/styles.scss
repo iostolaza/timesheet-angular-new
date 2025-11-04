@@ -1,4 +1,4 @@
-// src/styles.scss
+// file: src/styles.scss
 @use '@angular/material' as mat;
 
 @include mat.core();
@@ -96,4 +96,9 @@ body {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
+}
+
+.error-snack {
+  background: #f44336;
+  color: white;
 }

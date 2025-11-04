@@ -1,6 +1,4 @@
-
-// src/app/core/models/timesheet.model.ts
-
+// file: src/app/core/models/timesheet.model.ts
 import { ChargeCode } from './financial.model';
 
 export interface DailyAggregate {
@@ -27,6 +25,8 @@ export interface Timesheet {
   grossTotal?: number;
   taxAmount?: number;
   netTotal?: number;
+  startDate?: string;
+  endDate?: string;
 }
 
 export interface TimesheetEntry {

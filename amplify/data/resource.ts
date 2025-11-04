@@ -71,7 +71,8 @@ const schema = a.schema({
       grossTotal: a.float(),
       taxAmount: a.float(),
       netTotal: a.float(),
-      entries: a.hasMany('TimesheetEntry', 'timesheetId'),
+      startDate: a.date(),
+      endDate: a.date(),
     })
     .authorization(allow => [
       allow.owner().to(['create', 'read', 'update', 'delete']),
@@ -89,7 +90,6 @@ const schema = a.schema({
       description: a.string().required(),
       chargeCode: a.string().required(),
       owner: a.string().required(),
-      timesheet: a.belongsTo('Timesheet', 'timesheetId'),
     })
     .authorization(allow => [
       allow.owner().to(['create', 'read', 'update', 'delete']),
