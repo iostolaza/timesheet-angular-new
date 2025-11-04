@@ -17,7 +17,24 @@ export class TimesheetService {
   private authService = inject(AuthService);
   private financialService = inject(FinancialService);
 
+
   private mapTimesheetFromSchema(data: any): Timesheet {
+    // defensive: if somehow data.associatedChargeCodesJson is null, coerce to '[]'
+    const assocJsonRaw = data?.associatedChargeCodesJson ?? '[]';
+    const dailyAggRaw = data?.dailyAggregatesJson ?? '[]';
+    let parsedAssoc: ChargeCode[] = [];
+    let parsedDaily: DailyAggregate[] = [];
+    try {
+      parsedAssoc = JSON.parse(assocJsonRaw);
+    } catch (err) {
+      parsedAssoc = [];
+    }
+    try {
+      parsedDaily = JSON.parse(dailyAggRaw);
+    } catch (err) {
+      parsedDaily = [];
+    }
+
     return {
       id: data.id,
       status: data.status,
@@ -25,8 +42,8 @@ export class TimesheetService {
       totalCost: data.totalCost ?? 0,
       owner: data.owner,
       rejectionReason: data.rejectionReason ?? undefined,
-      associatedChargeCodes: JSON.parse(data.associatedChargeCodesJson || '[]'),
-      dailyAggregates: JSON.parse(data.dailyAggregatesJson || '[]'),
+      associatedChargeCodes: parsedAssoc,
+      dailyAggregates: parsedDaily,
       grossTotal: data.grossTotal ?? 0,
       taxAmount: data.taxAmount ?? 0,
       netTotal: data.netTotal ?? 0,
@@ -39,6 +56,8 @@ export class TimesheetService {
     const sub = await this.authService.getCurrentUserId();
     if (!sub) throw new Error('User not authenticated');
 
+    // IMPORTANT: If GraphQL throws on list because of DB null values, this call will fail;
+    // run the migration script to fix data and then rely on the API.
     const { data } = await this.client.models.Timesheet.list({
       filter: { owner: { eq: sub }, status: { eq: 'draft' } },
     });
@@ -67,13 +86,19 @@ export class TimesheetService {
   }
 
   async updateTimesheet(ts: Partial<Timesheet> & { id: string }): Promise<Timesheet> {
+    if (ts.associatedChargeCodes === undefined && ts.associatedChargeCodesJson === undefined) {
+      (ts as any).associatedChargeCodesJson = JSON.stringify([]);
+    }
+    if (ts.dailyAggregates === undefined && ts.dailyAggregatesJson === undefined) {
+      (ts as any).dailyAggregatesJson = JSON.stringify([]);
+    }
     if (ts.associatedChargeCodes) {
       (ts as any).associatedChargeCodesJson = JSON.stringify(ts.associatedChargeCodes);
-      delete ts.associatedChargeCodes;
+      delete (ts as any).associatedChargeCodes;
     }
     if (ts.dailyAggregates) {
       (ts as any).dailyAggregatesJson = JSON.stringify(ts.dailyAggregates);
-      delete ts.dailyAggregates;
+      delete (ts as any).dailyAggregates;
     }
 
     const { data, errors } = await this.client.models.Timesheet.update(ts);
@@ -88,6 +113,7 @@ export class TimesheetService {
 
     const { data, errors } = await this.client.models.Timesheet.list({ filter });
     if (errors?.length) throw new Error(errors.map(e => e.message).join(', '));
+    // NOTE: this will not run if GraphQL crashed due to nulls. Run migration first.
     return data.map(this.mapTimesheetFromSchema);
   }
 
@@ -101,6 +127,7 @@ export class TimesheetService {
       entries: entries as TimesheetEntry[],
     };
   }
+
 
   async addEntry(entry: Omit<TimesheetEntry, 'id' | 'timesheetId'>, timesheetId: string): Promise<TimesheetEntry> {
     const { data, errors } = await this.client.models.TimesheetEntry.create({ ...entry, timesheetId });

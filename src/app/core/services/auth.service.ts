@@ -1,37 +1,43 @@
 
 // src/app/core/services/auth.service.ts
 
+// src/app/core/services/auth.service.ts
 import { Injectable, signal } from '@angular/core';
 import { BehaviorSubject, from, Observable } from 'rxjs';
-import { 
-  signIn, signUp, confirmSignUp, confirmSignIn, signOut, 
+import {
+  signIn, signUp, confirmSignUp, confirmSignIn, signOut,
   getCurrentUser, fetchUserAttributes
 } from 'aws-amplify/auth';
-import { Hub } from 'aws-amplify/utils';  
+import { Hub } from 'aws-amplify/utils';
 import { generateClient } from 'aws-amplify/data';
 import type { Schema } from '../../../../amplify/data/resource';
 import type { UserProfile } from '../models/user.model';
 
-const client = generateClient<Schema>();
-
-interface SignInResult {
-  isSignedIn: boolean;
-  user?: UserProfile;
-  nextStep?: any;
-}
-
 @Injectable({ providedIn: 'root' })
 export class AuthService {
+  private _client: any = null;
+  private get client() {
+    if (!this._client) {
+     
+      this._client = generateClient<Schema>() as any;
+    }
+    return this._client;
+  }
+
   private currentUser = signal<UserProfile | null>(null);
   private currentUser$ = new BehaviorSubject<UserProfile | null>(null);
 
   constructor() {
-    this.setupAuthListener();
-    Hub.listen('auth', ({ payload }: { payload: { event: string } }) => {  // Typed payload
-      if (payload.event === 'signedIn' || payload.event === 'signedOut') {
-        void this.loadCurrentUser();
-      }
+    Hub.listen('auth', (payload: any) => {
+      try {
+        const event = payload?.payload?.event ?? payload?.event;
+        if (event === 'signedIn' || event === 'signedOut') {
+          void this.loadCurrentUser();
+        }
+      } catch {}
     });
+
+    void this.setupAuthListener();
   }
 
   private async setupAuthListener(): Promise<void> {
@@ -40,9 +46,15 @@ export class AuthService {
 
   private async loadCurrentUser(): Promise<void> {
     try {
-      const { userId } = await getCurrentUser();
+      const current = await getCurrentUser();
+      const userId =
+        (current as any)?.userId ??
+        (current as any)?.attributes?.sub ??
+        (current as any)?.username;
+
       const attrs = await fetchUserAttributes();
-      const profile = await this.syncUserProfile(userId, attrs.email);
+      const email = (attrs as any)?.email ?? (attrs as any)?.Attributes?.email;
+      const profile = await this.syncUserProfile(userId, email);
       this.emitUser(profile);
     } catch {
       this.emitUser(null);
@@ -51,16 +63,21 @@ export class AuthService {
 
   private async syncUserProfile(sub: string, email?: string): Promise<UserProfile | null> {
     try {
-      const { data } = await client.models.User.get({ id: sub });
+      const { data } = await this.client.models['User']['get']({ id: sub });
       if (data) return data as UserProfile;
     } catch {}
-    
+
     if (email) {
-      const { data } = await client.models.User.list({ filter: { email: { eq: email }}, limit: 1 });
-      if (data?.length) return data[0] as UserProfile;
+      try {
+        const { data } = await this.client.models['User']['list']({
+          filter: { email: { eq: email } },
+          limit: 1,
+        });
+        const user = (data as any)?.[0];
+        if (user) return user as UserProfile;
+      } catch {}
     }
 
-    // Create default profile
     return this.createUser({ id: sub, email: email!, name: '', rate: 0 });
   }
 
@@ -70,40 +87,48 @@ export class AuthService {
   }
 
   signUp(email: string, password: string): Observable<any> {
-    return from(signUp({
-      username: email,
-      password,
-      options: { userAttributes: { email } }
-    }));
+    return from(
+      signUp({
+        username: email,
+        password,
+        options: { userAttributes: { email } },
+      })
+    );
   }
 
   confirmSignUp(email: string, code: string): Observable<any> {
     return from(confirmSignUp({ username: email, confirmationCode: code }));
   }
 
-  signIn(email: string, password: string): Observable<SignInResult> {
-    return from((async () => {
-      const result = await signIn({ username: email, password });
-      if (result.nextStep.signInStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED') {
-        return { isSignedIn: false, nextStep: result.nextStep };
-      }
-      await this.loadCurrentUser();
-      return { isSignedIn: true, user: this.currentUser()! };
-    })());
+  signIn(email: string, password: string): Observable<any> {
+    return from(
+      (async () => {
+        const result = await signIn({ username: email, password });
+        if ((result as any).nextStep?.signInStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED') {
+          return { isSignedIn: false, nextStep: (result as any).nextStep };
+        }
+        await this.loadCurrentUser();
+        return { isSignedIn: true, user: this.currentUser()! };
+      })()
+    );
   }
 
   confirmSignIn(newPassword: string): Observable<UserProfile> {
-    return from((async () => {
-      await confirmSignIn({ challengeResponse: newPassword });
-      await this.loadCurrentUser();
-      return this.currentUser()!;
-    })());
+    return from(
+      (async () => {
+        await confirmSignIn({ challengeResponse: newPassword });
+        await this.loadCurrentUser();
+        return this.currentUser()!;
+      })()
+    );
   }
 
   signOut(): Observable<void> {
-    return from(signOut().then(() => {
-      this.emitUser(null);
-    }));
+    return from(
+      signOut().then(() => {
+        this.emitUser(null);
+      })
+    );
   }
 
   getCurrentUser(): Observable<UserProfile | null> {
@@ -128,22 +153,22 @@ export class AuthService {
       otMultiplier: payload.otMultiplier ?? 1.5,
       taxRate: payload.taxRate ?? 0.015,
     };
-    const { data } = await client.models.User.create(input);
+    const { data } = await this.client.models['User']['create'](input);
     const user = data as UserProfile;
     this.emitUser(user);
     return user;
   }
 
   async updateUser(id: string, updates: Partial<UserProfile>): Promise<UserProfile | null> {
-    const { data } = await client.models.User.update({ id, ...updates });
+    const { data } = await this.client.models['User']['update']({ id, ...updates });
     const updated = data as UserProfile;
     if (this.currentUser()?.id === id) this.emitUser(updated);
     return updated;
   }
 
-  async getUserById(id: string): Promise<UserProfile | null> { 
+  async getUserById(id: string): Promise<UserProfile | null> {
     try {
-      const { data } = await client.models.User.get({ id });
+      const { data } = await this.client.models['User']['get']({ id });
       return data as UserProfile | null;
     } catch (err) {
       console.error('getUserById error', err);
@@ -151,9 +176,9 @@ export class AuthService {
     }
   }
 
-  async deleteUser(id: string): Promise<boolean> { 
+  async deleteUser(id: string): Promise<boolean> {
     try {
-      await client.models.User.delete({ id });
+      await this.client.models['User']['delete']({ id });
       if (this.currentUser()?.id === id) this.emitUser(null);
       return true;
     } catch (err) {
