@@ -1,4 +1,6 @@
-// file: src/app/timesheet/calendar-view/calendar.component.ts
+
+//src/app/timesheet/calendar-view/calendar.component.ts
+
 import {
   Component,
   inject,
@@ -59,6 +61,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
   associatedChargeCodes = signal<ChargeCode[]>([]);
   periodStart = signal<string>('');
   periodEnd = signal<string>('');
+  userRate = signal<number>(25);
 
   private tsService = inject(TimesheetService);
   private authService = inject(AuthService);
@@ -68,7 +71,6 @@ export class CalendarComponent implements OnInit, AfterViewInit {
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
 
-  private userRate = 25;
   private today = new Date();
 
   calendarOptions = {
@@ -128,6 +130,10 @@ export class CalendarComponent implements OnInit, AfterViewInit {
     try {
       const email = this.authService.getCurrentUserSync()?.email ?? '';
       if (email) this.userEmail.set(email);
+
+      const sub = await this.authService.getCurrentUserId();
+      const user = await this.authService.getUserById(sub!);
+      this.userRate.set(user?.rate || 25);
 
       const { startStr, endStr } = this.getSemiMonthlyPeriod(this.today);
       this.periodStart.set(startStr);
@@ -452,7 +458,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
     const allEntries = this.events();
     this.weeklyTotal.set(allEntries.reduce((sum, e) => sum + e.hours, 0));
     this.dailyAvg.set(this.weeklyTotal() / 5);
-    this.totalCost.set(allEntries.reduce((sum, e) => sum + e.hours * this.userRate, 0));
+    this.totalCost.set(allEntries.reduce((sum, e) => sum + e.hours * this.userRate(), 0));
     this.validate();
     console.log('Updated summary', {
       totalHours: this.weeklyTotal(),

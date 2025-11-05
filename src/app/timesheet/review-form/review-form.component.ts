@@ -4,6 +4,7 @@
 import { Component, OnInit, inject, AfterViewInit, ViewChild } from '@angular/core';
 import { MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { TimesheetService } from '../../core/services/timesheet.service';
+import { AuthService } from '../../core/services/auth.service';
 import { FullCalendarModule, FullCalendarComponent } from '@fullcalendar/angular';
 import { EventInput } from '@fullcalendar/core';
 import dayGridPlugin from '@fullcalendar/daygrid';
@@ -30,6 +31,7 @@ export class ReviewComponent implements OnInit, AfterViewInit {
   timesheet = signal<Timesheet | null>(null);
   clientAggregates = signal<{chargeCode: string, totalHours: number, totalPay: number}[]>([]);
   dailyAggregates = signal<DailyAggregate[]>([]);
+  userRate = signal<number>(0);
   entryColumns = ['date', 'startTime', 'endTime', 'hours', 'chargeCode', 'description'];
   dailyColumns = ['date', 'base', 'ot', 'regPay', 'otPay', 'subtotal'];
   clientColumns = ['chargeCode', 'totalHours', 'totalPay'];
@@ -56,6 +58,7 @@ export class ReviewComponent implements OnInit, AfterViewInit {
   reviewForm: FormGroup;
 
   private tsService = inject(TimesheetService);
+  private authService = inject(AuthService);
   private fb = inject(FormBuilder);
   private dialogRef = inject(MatDialogRef<ReviewComponent>);
   private data = inject(MAT_DIALOG_DATA);
@@ -78,8 +81,11 @@ export class ReviewComponent implements OnInit, AfterViewInit {
     try {
       const ts = await this.tsService.getTimesheetWithEntries(id);
       console.log('Loaded timesheet:', ts);
-
       this.timesheet.set(ts);
+
+      const user = await this.authService.getUserById(ts.owner);
+      const rate = user?.rate || 25;
+      this.userRate.set(rate);
 
       // Update calendar events
       this.calendarOptions = {
@@ -94,7 +100,7 @@ export class ReviewComponent implements OnInit, AfterViewInit {
       // Daily aggregates (parse or compute)
       let daily = ts.dailyAggregates || [];
       if (daily.length === 0) {
-        daily = this.computeDailyAggregates(ts.entries, ts.totalCost ?? 0 / ts.totalHours, 1.5, 0.015);
+        daily = this.computeDailyAggregates(ts.entries, rate, 1.5, 0.015);
       }
       this.dailyAggregates.set(daily);
 
@@ -104,8 +110,7 @@ export class ReviewComponent implements OnInit, AfterViewInit {
           acc[e.chargeCode] = { totalHours: 0, totalPay: 0 };
         }
         acc[e.chargeCode].totalHours += e.hours;
-        const rate = ts.totalCost && ts.totalHours ? ts.totalCost / ts.totalHours : 0;
-        acc[e.chargeCode].totalPay += e.hours * rate;
+        acc[e.chargeCode].totalPay += this.computeEntryPay(e.hours, rate, 1.5);
         return acc;
       }, {} as Record<string, {totalHours: number, totalPay: number}>);
 
@@ -130,7 +135,7 @@ export class ReviewComponent implements OnInit, AfterViewInit {
 
   ngAfterViewInit() {
     if (this.calendarComponent) {
-      this.calendarComponent.getApi().refetchEvents();  // Refetch to fix view
+      this.calendarComponent.getApi().refetchEvents();
     }
   }
 
@@ -148,6 +153,12 @@ export class ReviewComponent implements OnInit, AfterViewInit {
       const otPay = ot * rate * otMultiplier;
       return { date, base, ot, regPay, otPay, subtotal: regPay + otPay };
     });
+  }
+
+  private computeEntryPay(hours: number, rate: number, otMultiplier: number): number {
+    const base = Math.min(8, hours);
+    const ot = Math.max(0, hours - 8);
+    return base * rate + ot * rate * otMultiplier;
   }
 
   submitReview() {

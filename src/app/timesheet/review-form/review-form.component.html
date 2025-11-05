@@ -89,6 +89,7 @@
 
   <h2 class="text-2xl font-semibold mb-4">Overall Summary</h2>
   <div class="grid grid-cols-2 gap-4 mb-6">
+    <p>Pay Rate: ${{ userRate() }}</p>
     <p>Total Hours: {{ timesheet()?.totalHours }}</p>
     <p>Gross Total: ${{ timesheet()?.grossTotal?.toFixed(2) }}</p>
     <p>Tax: ${{ timesheet()?.taxAmount?.toFixed(2) }}</p>
