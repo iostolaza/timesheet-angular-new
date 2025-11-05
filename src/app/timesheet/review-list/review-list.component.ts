@@ -30,17 +30,24 @@ export class ReviewListComponent implements OnInit {
     console.log('Edit timesheet', id);
   }
 
-  openReview(id: string) {
-    const dialogRef = this.dialog.open(ReviewComponent , { data: { id } });
-    dialogRef.afterClosed().subscribe(async (result) => {
-      if (result) {
-        if (result.approved) {
-          await this.tsService.approveTimesheet(id);
-        } else {
-          await this.tsService.rejectTimesheet(id, result.rejectionReason || '');
-        }
-        this.dataSource = await this.tsService.listTimesheets('submitted');
+openReview(id: string) {
+  const dialogRef = this.dialog.open(ReviewComponent, { 
+    data: { id },
+    width: '1000px', 
+    height: '1000px',
+    maxWidth: '100vw',
+    maxHeight: '90vw'
+    
+  });
+  dialogRef.afterClosed().subscribe(async (result) => {
+    if (result) {
+      if (result.approved) {
+        await this.tsService.approveTimesheet(id);
+      } else {
+        await this.tsService.rejectTimesheet(id, result.rejectionReason || '');
       }
-    });
-  }
+      this.dataSource = await this.tsService.listTimesheets('submitted');
+    }
+  });
+}
 }
