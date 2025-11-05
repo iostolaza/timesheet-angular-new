@@ -46,6 +46,8 @@ export class ReviewComponent implements OnInit, AfterViewInit {
         buttonText: '2 weeks',
       },
     },
+    slotMinTime: '07:00:00',
+    slotMaxTime: '21:00:00',
     editable: false,
     headerToolbar: {
       left: 'prev,next',

@@ -33,6 +33,7 @@ interface DialogData {
 })
 export class DayEntryDialogComponent {
   form: FormGroup;
+  saving = false;
 
   constructor(
     public dialogRef: MatDialogRef<DayEntryDialogComponent>,
@@ -40,13 +41,14 @@ export class DayEntryDialogComponent {
     private fb: FormBuilder
   ) {
     this.form = this.fb.group({
-      chargeCode: [this.data.entry.chargeCode || ''],
-      description: [this.data.entry.description || '', [Validators.required]],
+      chargeCode: [this.data.entry.chargeCode || '', Validators.required],
+      description: [this.data.entry.description || '', Validators.required],
     });
   }
 
   save() {
     if (this.form.valid) {
+      this.saving = true;
       const updatedEntry: TimesheetEntry = {
         ...this.data.entry,
         ...this.form.value,
@@ -57,5 +59,9 @@ export class DayEntryDialogComponent {
 
   delete() {
     this.dialogRef.close('delete');
+  }
+
+  cancel() {
+    this.dialogRef.close();
   }
 }

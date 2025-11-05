@@ -29,7 +29,7 @@ import { TimesheetEntry } from '../../core/models/timesheet.model';
 import { ChargeCode } from '../../core/models/financial.model';
 import { DayEntryDialogComponent } from './day-entry-dialog.component';
 import { ChargeCodeSearchDialogComponent } from '../../timesheet/charge-code-search/charge-code-search.component';
-import { format, startOfMonth, endOfMonth, addDays, parseISO } from 'date-fns';
+import { format, startOfMonth, endOfMonth, addDays, parseISO, startOfWeek, endOfWeek } from 'date-fns';
 
 @Component({
   selector: 'app-calendar',
@@ -583,6 +583,15 @@ export class CalendarComponent implements OnInit, AfterViewInit {
       horizontalPosition: 'center',
       verticalPosition: 'top',
       panelClass: ['error-snack'],
+    });
+  }
+
+  private openSuccess(message: string) {
+    this.snackBar.open(message, 'OK', {
+      duration: 3000,
+      horizontalPosition: 'center',
+      verticalPosition: 'top',
+      panelClass: ['success-snack'],
     });
   }
 }
