@@ -27,9 +27,9 @@
     </div>
   </form>
   <!-- Buttons -->
-  <div class="mt-6 flex justify-end gap-3">
-    <button mat-button class="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg! hover:bg-gray-300 disabled:opacity-50 font-medium" (click)="cancel()" [disabled]="saving" aria-label="Cancel">Cancel</button>
-    <button mat-button class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 font-medium" (click)="delete()" [disabled]="saving" aria-label="Delete">Delete</button>
-    <button mat-raised-button class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium" (click)="save()" [disabled]="form.invalid || saving" aria-label="Save">Save</button>
+<div class="mt-6 flex justify-end gap-3">
+    <button mat-button class="!bg-gray-200 text-gray-800 px-4 py-2 !rounded-lg hover:!bg-gray-300 disabled:opacity-50 font-medium" (click)="cancel()" [disabled]="saving" aria-label="Cancel">Cancel</button>
+    <button mat-button class="!bg-red-600 !text-white px-4 py-2 !rounded-lg hover:!bg-red-700 disabled:opacity-50 font-medium" (click)="delete()" [disabled]="saving" aria-label="Delete">Delete</button>
+    <button mat-raised-button class="!bg-gray-700 !text-white px-4 py-2 !rounded-lg hover:!bg-gray-600 disabled:opacity-50 font-medium" (click)="save()" [disabled]="form.invalid || saving" aria-label="Save">Save</button>
   </div>
 </div>

@@ -231,7 +231,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
     return Math.max(0, hours);
   }
 
-  async handleSelect(info: any) {
+async handleSelect(info: any) {
     try {
       const dateStr = info.startStr.split('T')[0];
       const startStr = info.startStr.split('T')[1].substring(0, 5);
@@ -257,14 +257,39 @@ export class CalendarComponent implements OnInit, AfterViewInit {
       const dailyTotal = tempEvents
         .filter(e => e.date === dateStr)
         .reduce((sum, e) => sum + e.hours, 0);
-      const weeklyTotal = tempEvents.reduce((sum, e) => sum + e.hours, 0);
+      const weeklyTotal = this.calculateWeeklyTotal(tempEvents, dateStr); // EDIT: Use per-week total
       if (dailyTotal > 8) console.warn('Daily hours exceed 8');
       if (weeklyTotal > 40) console.warn('Weekly hours exceed 40');
 
       const savedEntry = await this.tsService.addEntry(entryData, timesheetId);
       this.events.update(events => [...events, savedEntry]);
       this.updateSummary();
-      this.snackBar.open('Entry created. Click to edit charge code.', 'OK', { duration: 3000 });
+      this.openSuccess('Entry created. Editing details...');
+
+      // Open dialog immediately
+      const dialogRef = this.dialog.open(DayEntryDialogComponent, {
+        width: '400px',
+        data: { entry: savedEntry, availableChargeCodes: this.chargeCodes() },
+      });
+
+      dialogRef.afterClosed().subscribe(async (result: TimesheetEntry | 'delete' | undefined) => {
+        if (result === 'delete') {
+          await this.handleDelete(savedEntry);
+        } else if (result) {
+          await this.tsService.updateEntry(result, timesheetId!);
+          this.events.update(events => events.map(e => e.id === result.id ? result : e));
+          this.updateSummary();
+          this.openSuccess('Entry updated.');
+        } else {
+          // Cancel: Check if chargeCode empty, alert
+          if (!savedEntry.chargeCode || savedEntry.chargeCode.trim() === ' ') {
+            this.openError('Charge code is required. Click the entry to edit.');
+          }
+        }
+        this.cdr.markForCheck();
+        this.calendarComponent.getApi().refetchEvents();
+      });
+
       console.log('Added entry', { entryId: savedEntry.id });
     } catch (error: any) {
       console.error('Failed to handle select', error);
@@ -283,7 +308,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
     }
   }
 
-  async handleEventClick(info: any) {
+async handleEventClick(info: any) {
     const entry = info.event.extendedProps.entry;
     if (!entry) {
       console.error('No entry found for event', { eventId: info.event.id });
@@ -303,7 +328,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
           await this.tsService.deleteEntry(entry.id, timesheetId);
           this.events.update(events => events.filter(e => e.id !== entry.id));
           this.updateSummary();
-          this.snackBar.open('Entry deleted.', 'OK', { duration: 2000 });
+          this.openSuccess('Entry deleted.');
           console.log('Deleted entry', { entryId: entry.id });
         } catch (error: any) {
           console.error('Failed to delete entry', error);
@@ -330,7 +355,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
           const dailyTotal = tempEvents
             .filter(e => e.date === result.date)
             .reduce((sum, e) => sum + e.hours, 0);
-          const weeklyTotal = tempEvents.reduce((sum, e) => sum + e.hours, 0);
+          const weeklyTotal = this.calculateWeeklyTotal(tempEvents, result.date);
           if (dailyTotal > 8) console.warn('Daily hours exceed 8');
           if (weeklyTotal > 40) console.warn('Weekly hours exceed 40');
 
@@ -339,7 +364,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
             events.map(e => (e.id === result.id ? result : e))
           );
           this.updateSummary();
-          this.snackBar.open('Entry updated.', 'OK', { duration: 2000 });
+          this.openSuccess('Entry updated.');
           console.log('Updated entry', { entryId: result.id });
         } catch (error: any) {
           console.error('Failed to update entry', error);
@@ -357,6 +382,15 @@ export class CalendarComponent implements OnInit, AfterViewInit {
         }
       }
     });
+  }
+
+private calculateWeeklyTotal(events: TimesheetEntry[], referenceDate: string): number {
+    const date = parseISO(referenceDate);
+    const weekStart = startOfWeek(date, { weekStartsOn: 1 });
+    const weekEnd = endOfWeek(date, { weekStartsOn: 1 });
+    return events
+      .filter(e => parseISO(e.date) >= weekStart && parseISO(e.date) <= weekEnd)
+      .reduce((sum, e) => sum + e.hours, 0);
   }
 
   async handleEventDrop(info: any) {
@@ -454,14 +488,17 @@ export class CalendarComponent implements OnInit, AfterViewInit {
     }
   }
 
-  private updateSummary() {
+private updateSummary() {
     const allEntries = this.events();
-    this.weeklyTotal.set(allEntries.reduce((sum, e) => sum + e.hours, 0));
+    const calendarApi = this.calendarComponent?.getApi();
+    const viewStart = calendarApi ? parseISO(calendarApi.view.activeStart.toISOString().split('T')[0]) : this.today;
+    const viewWeekTotal = this.calculateWeeklyTotal(allEntries, format(viewStart, 'yyyy-MM-dd'));
+    this.weeklyTotal.set(viewWeekTotal);
     this.dailyAvg.set(this.weeklyTotal() / 5);
-    this.totalCost.set(allEntries.reduce((sum, e) => sum + e.hours * this.userRate(), 0));
+    this.totalCost.set(allEntries.reduce((sum, e) => sum + e.hours * this.userRate(), 0)); // Full period
     this.validate();
     console.log('Updated summary', {
-      totalHours: this.weeklyTotal(),
+      weeklyHours: this.weeklyTotal(),
       totalCost: this.totalCost(),
     });
     this.cdr.markForCheck();
@@ -470,24 +507,35 @@ export class CalendarComponent implements OnInit, AfterViewInit {
   private validate() {
     let msg = '';
     const allEntries = this.events();
-    const dailyExceed = allEntries.filter(e => {
-      const dailyTotal = allEntries
-        .filter(entry => entry.date === e.date)
-        .reduce((sum, entry) => sum + entry.hours, 0);
-      return dailyTotal > 8;
+    // Daily
+    const dateTotals = new Map<string, number>();
+    allEntries.forEach(e => {
+      dateTotals.set(e.date, (dateTotals.get(e.date) || 0) + e.hours);
     });
-    if (dailyExceed.length > 0) msg += 'Daily hours exceed 8h; ';
-    if (this.weeklyTotal() > 40) msg += 'Weekly hours exceed 40h. ';
-    const hasUnassignedChargeCode = allEntries.some(e => e.chargeCode === 'Unassigned' || e.chargeCode === ' ');
-    if (hasUnassignedChargeCode) msg += 'All entries must have a valid charge code; ';
+    const dailyExceed = Array.from(dateTotals.values()).some(total => total > 8);
+    if (dailyExceed) msg += 'Daily hours exceed 8h; ';
+
+    // Weekly (all weeks in period)
+    const weekTotals = new Map<string, number>();
+    allEntries.forEach(e => {
+      const weekKey = format(startOfWeek(parseISO(e.date), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+      weekTotals.set(weekKey, (weekTotals.get(weekKey) || 0) + e.hours);
+    });
+    const weeklyExceed = Array.from(weekTotals.values()).some(total => total > 40);
+    if (weeklyExceed) msg += 'Weekly hours exceed 40h; ';
+
+    // Charge code
+    const hasUnassigned = allEntries.some(e => !e.chargeCode || e.chargeCode.trim() === ' ' || e.chargeCode === 'Unassigned');
+    if (hasUnassigned) msg += 'All entries must have a valid charge code; ';
+
     this.validationMessage.set(msg);
-    if (msg) this.snackBar.open(msg, 'OK', { duration: 5000 });
+    if (msg) this.openError(msg);
     this.cdr.markForCheck();
   }
 
-  async submitTimesheet() {
+async submitTimesheet() {
     if (!this.isValid()) {
-      this.snackBar.open('Cannot submit: ' + this.validationMessage(), 'OK', { duration: 5000 });
+      this.openError('Cannot submit: ' + this.validationMessage());
       return;
     }
 
@@ -495,10 +543,12 @@ export class CalendarComponent implements OnInit, AfterViewInit {
       const timesheetId = this.currentTimesheetId();
       if (!timesheetId) throw new Error('No timesheet ID available');
       const sub = await this.authService.getCurrentUserId();
-      const uniqueChargeCodes = [...new Set(this.events().map(e => e.chargeCode))].map(code => ({ name: code, createdBy: sub ?? 'system', date: new Date().toISOString() }));
+      const uniqueChargeCodes = [...new Set(this.events().map(e => e.chargeCode))].filter(code => code.trim() !== '').map(code => ({ name: code, createdBy: sub ?? 'system', date: new Date().toISOString() }));
       const tsData = {
         id: timesheetId,
-        totalHours: this.weeklyTotal(),
+        startDate: this.periodStart(),
+        endDate: this.periodEnd(),
+        totalHours: this.events().reduce((sum, e) => sum + e.hours, 0), // Full period
         totalCost: this.totalCost(),
         status: 'submitted' as const,
         owner: sub ?? 'default-user',
@@ -508,7 +558,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
       this.events.set([]);
       this.updateSummary();
       this.router.navigate(['/review', timesheetId]);
-      this.snackBar.open('Timesheet submitted.', 'OK', { duration: 2000 });
+      this.openSuccess('Timesheet submitted.');
       console.log('Timesheet submitted', { timesheetId });
     } catch (error: any) {
       console.error('Failed to submit timesheet', error);
@@ -577,12 +627,12 @@ export class CalendarComponent implements OnInit, AfterViewInit {
     }
   }
 
-  private openError(message: string) {
+private openError(message: string) {
     this.snackBar.open(message, 'Close', {
       duration: 7000,
       horizontalPosition: 'center',
       verticalPosition: 'top',
-      panelClass: ['error-snack'],
+      panelClass: ['error-snack', 'bg-red-600', 'text-white'], 
     });
   }
 
@@ -591,7 +641,7 @@ export class CalendarComponent implements OnInit, AfterViewInit {
       duration: 3000,
       horizontalPosition: 'center',
       verticalPosition: 'top',
-      panelClass: ['success-snack'],
+      panelClass: ['success-snack', 'bg-green-600', 'text-white'],
     });
   }
 }
