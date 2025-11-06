@@ -1,7 +1,6 @@
 
 // src/app/core/services/auth.service.ts
 
-// src/app/core/services/auth.service.ts
 import { Injectable, signal } from '@angular/core';
 import { BehaviorSubject, from, Observable } from 'rxjs';
 import {
@@ -63,13 +62,13 @@ export class AuthService {
 
   private async syncUserProfile(sub: string, email?: string): Promise<UserProfile | null> {
     try {
-      const { data } = await this.client.models['User']['get']({ id: sub });
+      const { data } = await this.client.models.User.get({ id: sub });
       if (data) return data as UserProfile;
     } catch {}
 
     if (email) {
       try {
-        const { data } = await this.client.models['User']['list']({
+        const { data } = await this.client.models.User.list({
           filter: { email: { eq: email } },
           limit: 1,
         });
@@ -152,23 +151,31 @@ export class AuthService {
       rate: payload.rate ?? 0,
       otMultiplier: payload.otMultiplier ?? 1.5,
       taxRate: payload.taxRate ?? 0.015,
+      owner: payload.id,
     };
-    const { data } = await this.client.models['User']['create'](input);
+    const { data } = await this.client.models.User.create(input);
     const user = data as UserProfile;
     this.emitUser(user);
     return user;
   }
 
   async updateUser(id: string, updates: Partial<UserProfile>): Promise<UserProfile | null> {
-    const { data } = await this.client.models['User']['update']({ id, ...updates });
-    const updated = data as UserProfile;
-    if (this.currentUser()?.id === id) this.emitUser(updated);
-    return updated;
+    console.log('Updating user:', id, updates);
+    try {
+      const { data } = await this.client.models.User.update({ id, ...updates });
+      const updated = data as UserProfile;
+      if (this.currentUser()?.id === id) this.emitUser(updated);
+      console.log('Update successful:', updated);
+      return updated;
+    } catch (error) {
+      console.error('Update failed:', error);
+      throw error;
+    }
   }
 
   async getUserById(id: string): Promise<UserProfile | null> {
     try {
-      const { data } = await this.client.models['User']['get']({ id });
+      const { data } = await this.client.models.User.get({ id });
       return data as UserProfile | null;
     } catch (err) {
       console.error('getUserById error', err);
@@ -178,7 +185,7 @@ export class AuthService {
 
   async deleteUser(id: string): Promise<boolean> {
     try {
-      await this.client.models['User']['delete']({ id });
+      await this.client.models.User.delete({ id });
       if (this.currentUser()?.id === id) this.emitUser(null);
       return true;
     } catch (err) {

@@ -1,4 +1,3 @@
-
 // src/app/app.routes.ts
 
 import { Routes, CanActivateFn } from '@angular/router';
@@ -25,5 +24,6 @@ export const routes: Routes = [
   { path: 'accounts/list', loadComponent: () => import('./financial/account-list/account-list.component').then(m => m.AccountListComponent), canActivate: [authGuard] },
   { path: 'accounts/ledger', loadComponent: () => import('./financial/ledger-view/ledger-view.component').then(m => m.LedgerViewComponent), canActivate: [authGuard] },
   { path: 'accounts/ledger/:id', loadComponent: () => import('./financial/ledger-view/ledger-view.component').then(m => m.LedgerViewComponent), canActivate: [authGuard] },
+  { path: 'user/edit', loadComponent: () => import('./edit-user-profile/edit-user-profile.component').then(m => m.EditUserProfileComponent), canActivate: [authGuard] },
   { path: '**', redirectTo: '/start' },
 ];

@@ -17,6 +17,7 @@ const schema = a.schema({
       rate: a.float().required(),
       otMultiplier: a.float().default(1.5),
       taxRate: a.float().default(0.015),
+      owner: a.string().required(),
     })
     .authorization(allow => [
       allow.owner().to(['read', 'update', 'delete']),

@@ -110,6 +110,6 @@
       <mat-error *ngIf="reviewForm.get('rejectionReason')?.hasError('required')">Reason required for rejection</mat-error>
     </mat-form-field>
 
-    <button mat-raised-button color="primary" type="submit" [disabled]="reviewForm.invalid">Submit Review</button>
+    <button mat-raised-button class="!bg-gray-700 !text-white px-4 py-2 !rounded-lg hover:!bg-gray-600 disabled:opacity-50 font-medium" type="submit" [disabled]="reviewForm.invalid">Submit</button>
   </form>
 </div>

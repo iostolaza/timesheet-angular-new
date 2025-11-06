@@ -1,5 +1,7 @@
-// file: src/app/edit-user-profile/edit-user-profile.component.ts
-import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
+
+//src/app/edit-user-profile/edit-user-profile.component.ts
+
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -22,7 +24,6 @@ import { MatSelectModule } from '@angular/material/select';
     MatSelectModule,
   ],
   templateUrl: './edit-user-profile.component.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class EditUserProfileComponent implements OnInit {
   userForm!: FormGroup;
@@ -38,17 +39,15 @@ export class EditUserProfileComponent implements OnInit {
     public router: Router
   ) {}
 
-  async ngOnInit() {
+  ngOnInit() {
     this.loading = true;
     
     try {
-      this.currentUser = await this.authService.getCurrentUserSync();
+      this.currentUser = this.authService.getCurrentUserSync();
       
       if (!this.currentUser) {
-        this.errorMessage = 'User profile not found. Please create your profile first.';
-        setTimeout(() => {
-          this.router.navigate(['/user/create']);
-        }, 2000);
+        this.errorMessage = 'User profile not found. Please sign out and sign in again.';
+        this.loading = false;
         return;
       }
 
@@ -93,6 +92,9 @@ export class EditUserProfileComponent implements OnInit {
       if (result) {
         this.successMessage = 'Profile updated successfully!';
         this.currentUser = result;
+        setTimeout(() => {
+          this.router.navigate(['/start']);
+        }, 2000);
       }
     } catch (error: any) {
       this.errorMessage = error.message || 'Failed to update profile';
@@ -113,7 +115,9 @@ export class EditUserProfileComponent implements OnInit {
         const success = await this.authService.deleteUser(this.currentUser.id);
         if (success) {
           alert('Profile deleted successfully');
-          this.router.navigate(['/']);
+          this.authService.signOut().subscribe(() => {
+            this.router.navigate(['/auth']);
+          });
         }
       } catch (error) {
         this.errorMessage = 'Failed to delete profile';

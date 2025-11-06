@@ -244,15 +244,19 @@ export class FinancialService {
     }
   }
 
-  async createUserIfNotExists(user: UserProfile): Promise<void> {
-    try {
-      await this.getUserById(user.id);
-      console.log('User already exists:', user.id);
-    } catch (err) {
-      const { data } = await this.client.models.User.create(user);
-      console.log('Created new User:', data);
-    }
+async createUserIfNotExists(user: UserProfile): Promise<void> {
+  try {
+    await this.getUserById(user.id);
+    console.log('User already exists:', user.id);
+  } catch (err) {
+    const input = {
+      ...user,
+      owner: user.id,
+    };
+    const { data } = await this.client.models.User.create(input);
+    console.log('Created new User:', data);
   }
+}
 
   async getUserById(id: string): Promise<UserProfile> {
     const { data } = await this.client.models.User.get({ id });
