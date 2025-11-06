@@ -58,39 +58,23 @@ export class AuthService {
   }
 
   private async syncUserProfile(sub: string, email: string): Promise<UserProfile | null> {
-    // Try to get by ID
     try {
-      const { data, errors } = await this.client.models.User.get({ id: sub });
-      if (errors) {
-        console.error('Get user by ID errors:', errors);
-      }
+      const { data } = await this.client.models.User.get({ id: sub });
       if (data) return data as UserProfile;
-    } catch (error) {
-      console.error('Failed to get user by ID:', error);
-    }
+    } catch {}
 
-    // Try to list by email
     try {
-      const { data, errors } = await this.client.models.User.list({
+      const { data } = await this.client.models.User.list({
         filter: { email: { eq: email } },
         limit: 1,
       });
-      if (errors) {
-        console.error('List user by email errors:', errors);
-      }
       const user = (data as any)?.[0];
       if (user) return user as UserProfile;
-    } catch (error) {
-      console.error('Failed to list user by email:', error);
-    }
+    } catch {}
 
-    // Create new profile
-    try {
-      return await this.createUser({ id: sub, email, name: email.split('@')[0] || 'New User', rate: 0 }); // Default name to avoid empty string issues
-    } catch (error) {
-      console.error('Failed to create user:', error);
-      return null;
-    }
+    if (!email) return null; // Prevent create with null email
+
+    return this.createUser({ id: sub, email, name: email.split('@')[0] || 'User', rate: 0 });
   }
 
   private emitUser(user: UserProfile | null) {
@@ -120,9 +104,6 @@ export class AuthService {
           return { isSignedIn: false, nextStep: (result as any).nextStep };
         }
         await this.loadCurrentUser();
-        if (!this.currentUser()) {
-          throw new Error('Failed to load user profile after sign in');
-        }
         return { isSignedIn: true, user: this.currentUser()! };
       })()
     );
@@ -133,9 +114,6 @@ export class AuthService {
       (async () => {
         await confirmSignIn({ challengeResponse: newPassword });
         await this.loadCurrentUser();
-        if (!this.currentUser()) {
-          throw new Error('Failed to load user profile after confirming sign in');
-        }
         return this.currentUser()!;
       })()
     );
@@ -165,72 +143,40 @@ export class AuthService {
     const input: any = {
       id: payload.id,
       email: payload.email!,
-      name: payload.name ?? '',
+      name: payload.name ?? 'User',
       role: payload.role ?? 'Employee',
       rate: payload.rate ?? 0,
       otMultiplier: payload.otMultiplier ?? 1.5,
       taxRate: payload.taxRate ?? 0.015,
-      // Removed owner; Amplify auto-populates with authenticated user's sub
     };
-    const { data, errors } = await this.client.models.User.create(input);
-    if (errors) {
-      console.error('Create user errors:', errors);
-      throw new Error(errors.map((e: { message: string }) => e.message).join(', '));
-    }
-    if (!data) {
-      throw new Error('No data returned from create');
-    }
+    const { data } = await this.client.models.User.create(input);
     const user = data as UserProfile;
     this.emitUser(user);
     return user;
   }
 
   async updateUser(id: string, updates: Partial<UserProfile>): Promise<UserProfile | null> {
-    console.log('Updating user:', id, updates);
-    try {
-      const { data, errors } = await this.client.models.User.update({ id, ...updates });
-      if (errors) {
-        console.error('Update user errors:', errors);
-        throw new Error(errors.map((e: { message: string }) => e.message).join(', '));
-      }
-      if (!data) {
-        throw new Error('Update returned no data');
-      }
-      const updated = data as UserProfile;
-      if (this.currentUser()?.id === id) this.emitUser(updated);
-      console.log('Update successful:', updated);
-      return updated;
-    } catch (error) {
-      console.error('Update failed:', error);
-      throw error;
-    }
+    const { data } = await this.client.models.User.update({ id, ...updates });
+    const updated = data as UserProfile;
+    if (this.currentUser()?.id === id) this.emitUser(updated);
+    return updated;
   }
 
   async getUserById(id: string): Promise<UserProfile | null> {
     try {
-      const { data, errors } = await this.client.models.User.get({ id });
-      if (errors) {
-        console.error('Get user by ID errors:', errors);
-        return null;
-      }
+      const { data } = await this.client.models.User.get({ id });
       return data as UserProfile | null;
     } catch (err) {
-      console.error('getUserById error', err);
       return null;
     }
   }
 
   async deleteUser(id: string): Promise<boolean> {
     try {
-      const { errors } = await this.client.models.User.delete({ id });
-      if (errors) {
-        console.error('Delete user errors:', errors);
-        return false;
-      }
+      await this.client.models.User.delete({ id });
       if (this.currentUser()?.id === id) this.emitUser(null);
       return true;
     } catch (err) {
-      console.error('deleteUser error', err);
       return false;
     }
   }
