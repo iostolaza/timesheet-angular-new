@@ -20,8 +20,8 @@ const schema = a.schema({
       owner: a.string().required(),
     })
     .authorization(allow => [
-      allow.owner().to(['read', 'update', 'delete']),
-      allow.authenticated().to(['create', 'read']),
+      allow.ownerDefinedIn('owner').to(['read', 'update', 'delete']),
+      allow.authenticated().to(['create', 'update','read']),
     ]),
 
   Account: a

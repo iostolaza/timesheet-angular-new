@@ -1,7 +1,6 @@
 
 // src/app/core/services/financial.service.ts
 
-// src/app/core/services/financial.service.ts
 import { Injectable, inject } from '@angular/core';
 import { generateClient } from 'aws-amplify/data';
 import { firstValueFrom } from 'rxjs';
@@ -246,15 +245,32 @@ export class FinancialService {
 
 async createUserIfNotExists(user: UserProfile): Promise<void> {
   try {
-    await this.getUserById(user.id);
-    console.log('User already exists:', user.id);
+    const { data: existing, errors: getErrors } = await this.client.models.User.get({ id: user.id });
+    if (getErrors) {
+      console.error('Get user errors in createIfNotExists:', getErrors);
+    }
+    if (existing) {
+      console.log('User already exists:', user.id);
+      return;
+    }
   } catch (err) {
+    console.error('Error checking user existence:', err);
+  }
+
+  try {
     const input = {
       ...user,
       owner: user.id,
     };
-    const { data } = await this.client.models.User.create(input);
+    const { data, errors } = await this.client.models.User.create(input);
+    if (errors) {
+      console.error('Create user errors in createIfNotExists:', errors);
+      throw new Error(errors.map(e => e.message).join(', '));
+    }
     console.log('Created new User:', data);
+  } catch (err) {
+    console.error('Failed to create user in createIfNotExists:', err);
+    throw err;
   }
 }
 
