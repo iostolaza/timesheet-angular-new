@@ -19,8 +19,10 @@ const schema = a.schema({
       taxRate: a.float().default(0.015),
     })
     .authorization(allow => [
-      allow.owner().to(['create', 'read', 'update', 'delete']),
-      allow.authenticated().to(['create', 'read', 'update']),
+      allow.authenticated().to(['create', 'read', 'update', 'delete']),
+      allow.group('Admin').to(['create', 'read', 'update', 'delete']), 
+      allow.group('Manager').to(['create', 'read', 'update']), 
+      allow.group('Employee').to(['create', 'read', 'update']), 
     ]),
 
   Account: a
@@ -39,6 +41,9 @@ const schema = a.schema({
     })
     .authorization(allow => [
       allow.authenticated().to(['create', 'read', 'update', 'delete']),
+      allow.group('Admin').to(['create', 'read', 'update', 'delete']), 
+      allow.group('Manager').to(['create', 'read', 'update']), 
+      allow.group('Employee').to(['create', 'read', 'update']), 
     ]),
 
   Transaction: a
@@ -56,6 +61,10 @@ const schema = a.schema({
     })
     .authorization(allow => [
       allow.authenticated().to(['create', 'read', 'update', 'delete']),
+
+      allow.group('Admin').to(['create', 'read', 'update', 'delete']), 
+      allow.group('Manager').to(['create', 'read', 'update']), 
+      allow.group('Employee').to(['create', 'read', 'update']), 
     ]),
 
   Timesheet: a
@@ -76,7 +85,11 @@ const schema = a.schema({
     })
     .authorization(allow => [
       allow.owner().to(['create', 'read', 'update', 'delete']),
-      allow.authenticated().to(['read', 'update']),
+      allow.authenticated().to(['create', 'read', 'update']), 
+
+      allow.group('Admin').to(['create', 'read', 'update', 'delete']), 
+      allow.group('Manager').to(['create', 'read', 'update']), 
+      allow.group('Employee').to(['create', 'read', 'update']), 
     ]),
 
   TimesheetEntry: a
@@ -93,7 +106,11 @@ const schema = a.schema({
     })
     .authorization(allow => [
       allow.owner().to(['create', 'read', 'update', 'delete']),
-      allow.authenticated().to(['read']),
+      allow.authenticated().to(['create', 'read', 'update']), 
+
+      allow.group('Admin').to(['create', 'read', 'update', 'delete']), 
+      allow.group('Manager').to(['create', 'read', 'update']), 
+      allow.group('Employee').to(['create', 'read', 'update']), 
     ]),
 });
 

@@ -1,7 +1,7 @@
 
 // src/app/core/auth/auth.component.ts
 
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, OnInit } from '@angular/core'; // Added OnInit
 import { FormBuilder, Validators, ReactiveFormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
@@ -17,7 +17,7 @@ import { MatButtonModule } from '@angular/material/button';
   imports: [CommonModule, ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatButtonModule],
   templateUrl: './auth.component.html',
 })
-export class AuthComponent {
+export class AuthComponent implements OnInit {
   private fb = inject(FormBuilder);
   private router = inject(Router);
   private authService = inject(AuthService);
@@ -40,6 +40,12 @@ export class AuthComponent {
   newPasswordForm = this.fb.group({
     newPassword: ['', [Validators.required, Validators.minLength(8)]],
   });
+
+  async ngOnInit() {
+    if (await this.authService.isAuthenticated()) {
+      this.router.navigate(['/start']);
+    }
+  }
 
   toggleMode() {
     this.error = null;
@@ -102,7 +108,12 @@ export class AuthComponent {
     });
   }
 
-  private handleSignin({ email, password }: any) {
+  private async handleSignin({ email, password }: any) {
+    if (await this.authService.isAuthenticated()) {
+      await this.authService.loadCurrentUser();
+      this.router.navigate(['/start']);
+      return;
+    }
     this.authService.signIn(email, password).subscribe({
       next: (result: any) => {
         if (result.isSignedIn) {

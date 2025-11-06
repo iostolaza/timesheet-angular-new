@@ -230,44 +230,6 @@ export class FinancialService {
     return account.chargeCodes ?? [];
   }
 
-  async listUsers(): Promise<UserProfile[]> {
-    try {
-      const { data, errors } = await this.client.models.User.list();
-      if (errors?.length) {
-        throw new Error(`Failed to list users: ${errors.map(e => e.message).join(', ')}`);
-      }
-      return data as UserProfile[];
-    } catch (error) {
-      console.error('Error listing users:', error);
-      throw error;
-    }
-  }
-
-async createUserIfNotExists(user: UserProfile): Promise<void> {
-  try {
-    const { data } = await this.client.models.User.get({ id: user.id });
-    if (data) {
-      console.log('User already exists:', user.id);
-      return;
-    }
-  } catch (err) {}
-
-  try {
-    const input = {
-      ...user,
-    };
-    const { data } = await this.client.models.User.create(input);
-    console.log('Created new User:', data);
-  } catch (err) {
-    throw err;
-  }
-}
-  async getUserById(id: string): Promise<UserProfile> {
-    const { data } = await this.client.models.User.get({ id });
-    if (!data) throw new Error(`User with id ${id} not found`);
-    return data as UserProfile;
-  }
-
   async addFunds(accountId: string, amount: number, description: string = 'Add funds'): Promise<Transaction> {
     return this.createTransaction({ accountId, amount, debit: false, description });
   }

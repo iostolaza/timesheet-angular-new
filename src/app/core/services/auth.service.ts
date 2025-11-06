@@ -42,7 +42,16 @@ export class AuthService {
     await this.loadCurrentUser();
   }
 
-  private async loadCurrentUser(): Promise<void> {
+  async isAuthenticated(): Promise<boolean> {
+    try {
+      await getCurrentUser();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async loadCurrentUser(): Promise<void> {
     try {
       const current = await getCurrentUser();
       const userId = current.userId; // sub
@@ -59,22 +68,33 @@ export class AuthService {
 
   private async syncUserProfile(sub: string, email: string): Promise<UserProfile | null> {
     try {
-      const { data } = await this.client.models.User.get({ id: sub });
+      const { data, errors } = await this.client.models.User.get({ id: sub });
+      if (errors?.length) throw new Error(errors.map((e: { message: string }) => e.message).join(', '));
       if (data) return data as UserProfile;
-    } catch {}
+    } catch (error) {
+      console.error('Failed to get user by ID:', error);
+    }
 
     try {
-      const { data } = await this.client.models.User.list({
+      const { data, errors } = await this.client.models.User.list({
         filter: { email: { eq: email } },
         limit: 1,
       });
+      if (errors?.length) throw new Error(errors.map((e: { message: string }) => e.message).join(', '));
       const user = (data as any)?.[0];
       if (user) return user as UserProfile;
-    } catch {}
+    } catch (error) {
+      console.error('Failed to list user by email:', error);
+    }
 
-    if (!email) return null; // Prevent create with null email
+    if (!email) return null;
 
-    return this.createUser({ id: sub, email, name: email.split('@')[0] || 'User', rate: 0 });
+    try {
+      return await this.createUser({ id: sub, email, name: email.split('@')[0] || 'New User', role: 'Employee', rate: 0 });
+    } catch (error) {
+      console.error('Failed to create user:', error);
+      return null;
+    }
   }
 
   private emitUser(user: UserProfile | null) {
@@ -99,11 +119,18 @@ export class AuthService {
   signIn(email: string, password: string): Observable<any> {
     return from(
       (async () => {
+        if (await this.isAuthenticated()) {
+          await this.loadCurrentUser();
+          return { isSignedIn: true, user: this.currentUser()! };
+        }
         const result = await signIn({ username: email, password });
         if ((result as any).nextStep?.signInStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED') {
           return { isSignedIn: false, nextStep: (result as any).nextStep };
         }
         await this.loadCurrentUser();
+        if (!this.currentUser()) {
+          throw new Error('Failed to load user profile after sign in');
+        }
         return { isSignedIn: true, user: this.currentUser()! };
       })()
     );
@@ -114,6 +141,9 @@ export class AuthService {
       (async () => {
         await confirmSignIn({ challengeResponse: newPassword });
         await this.loadCurrentUser();
+        if (!this.currentUser()) {
+          throw new Error('Failed to load user profile after confirming sign in');
+        }
         return this.currentUser()!;
       })()
     );
@@ -140,23 +170,38 @@ export class AuthService {
   }
 
   async createUser(payload: Partial<UserProfile>): Promise<UserProfile> {
+    if (!payload.email) throw new Error('Email required for create');
+    if (!payload.name) payload.name = 'New User';
     const input: any = {
       id: payload.id,
       email: payload.email!,
-      name: payload.name ?? 'User',
+      name: payload.name,
       role: payload.role ?? 'Employee',
       rate: payload.rate ?? 0,
       otMultiplier: payload.otMultiplier ?? 1.5,
       taxRate: payload.taxRate ?? 0.015,
     };
-    const { data } = await this.client.models.User.create(input);
+    const { data, errors } = await this.client.models.User.create(input);
+    if (errors?.length) {
+      throw new Error(errors.map((e: { message: string }) => e.message).join(', '));
+    }
+    if (!data) {
+      throw new Error('No data returned from create');
+    }
     const user = data as UserProfile;
     this.emitUser(user);
     return user;
   }
 
   async updateUser(id: string, updates: Partial<UserProfile>): Promise<UserProfile | null> {
-    const { data } = await this.client.models.User.update({ id, ...updates });
+    console.log('Updating user:', id, updates);
+    const { data, errors } = await this.client.models.User.update({ id, ...updates });
+    if (errors?.length) {
+      throw new Error(errors.map((e: { message: string }) => e.message).join(', '));
+    }
+    if (!data) {
+      return null;
+    }
     const updated = data as UserProfile;
     if (this.currentUser()?.id === id) this.emitUser(updated);
     return updated;
@@ -164,19 +209,23 @@ export class AuthService {
 
   async getUserById(id: string): Promise<UserProfile | null> {
     try {
-      const { data } = await this.client.models.User.get({ id });
+      const { data, errors } = await this.client.models.User.get({ id });
+      if (errors?.length) throw new Error(errors.map((e: { message: string }) => e.message).join(', '));
       return data as UserProfile | null;
     } catch (err) {
+      console.error('getUserById error', err);
       return null;
     }
   }
 
   async deleteUser(id: string): Promise<boolean> {
     try {
-      await this.client.models.User.delete({ id });
+      const { errors } = await this.client.models.User.delete({ id });
+      if (errors?.length) throw new Error(errors.map((e: { message: string }) => e.message).join(', '));
       if (this.currentUser()?.id === id) this.emitUser(null);
       return true;
     } catch (err) {
+      console.error('deleteUser error', err);
       return false;
     }
   }

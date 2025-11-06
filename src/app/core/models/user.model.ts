@@ -9,7 +9,6 @@ export interface UserProfile {
   rate: number;
   otMultiplier?: number | null;
   taxRate?: number | null;
-  owner?: string | null; 
   createdAt: string; 
   updatedAt: string;
 }
