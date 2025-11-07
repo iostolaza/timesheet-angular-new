@@ -2,42 +2,24 @@
 <!-- src/app/timesheet/review-form/review-form.component.html -->
 
 <div class="container mx-auto p-4 max-w-6xl">
-  <h1 class="text-3xl font-bold mb-4">Timesheet Review - ID: {{ timesheet()?.id }}</h1>
-  <p class="text-gray-600 mb-6">Status: {{ timesheet()?.status }}</p>
+  <h1 class="text-3xl font-bold mb-2">
+    Timesheet Review
+  </h1>
+
+  <p class="text-gray-700 mb-2">
+    <strong>Timesheet ID: </strong> <span class="font-mono text-lg">{{ displayedTimesheetIdSuffix() }}</span>
+  </p>
+
+    <p class="text-gray-700 mb-2">
+      <strong>User:</strong>
+      <span class="ml-2">{{ userName() }} <span class="text-gray-500">&lt;{{ userEmail() }}&gt;</span></span>
+    </p>
+
+    <p class="text-gray-600 mb-6">Status: <strong>{{ timesheet()?.status }}</strong></p>
 
   <div class="bg-white shadow-md rounded-lg p-6 mb-6 overflow-x-auto">
     <full-calendar [options]="calendarOptions"></full-calendar>
   </div>
-
-  <h2 class="text-2xl font-semibold mb-4">Granular Entries</h2>
-  <table mat-table [dataSource]="timesheet()?.entries || []" class="table w-full mb-6">
-    <ng-container matColumnDef="date">
-      <th mat-header-cell *matHeaderCellDef> Date </th>
-      <td mat-cell *matCellDef="let entry"> {{ entry.date }} </td>
-    </ng-container>
-    <ng-container matColumnDef="startTime">
-      <th mat-header-cell *matHeaderCellDef> Start </th>
-      <td mat-cell *matCellDef="let entry"> {{ entry.startTime }} </td>
-    </ng-container>
-    <ng-container matColumnDef="endTime">
-      <th mat-header-cell *matHeaderCellDef> End </th>
-      <td mat-cell *matCellDef="let entry"> {{ entry.endTime }} </td>
-    </ng-container>
-    <ng-container matColumnDef="hours">
-      <th mat-header-cell *matHeaderCellDef> Hours </th>
-      <td mat-cell *matCellDef="let entry"> {{ entry.hours }} </td>
-    </ng-container>
-    <ng-container matColumnDef="chargeCode">
-      <th mat-header-cell *matHeaderCellDef> Charge Code </th>
-      <td mat-cell *matCellDef="let entry"> {{ entry.chargeCode }} </td>
-    </ng-container>
-    <ng-container matColumnDef="description">
-      <th mat-header-cell *matHeaderCellDef> Description </th>
-      <td mat-cell *matCellDef="let entry"> {{ entry.description }} </td>
-    </ng-container>
-    <tr mat-header-row *matHeaderRowDef="entryColumns"></tr>
-    <tr mat-row *matRowDef="let row; columns: entryColumns;"></tr>
-  </table>
 
   <h2 class="text-2xl font-semibold mb-4">Daily Aggregates</h2>
   <table mat-table [dataSource]="dailyAggregates()" class="table w-full mb-6">
@@ -87,29 +69,57 @@
     <tr mat-row *matRowDef="let row; columns: clientColumns;"></tr>
   </table>
 
+    <h2 class="text-2xl font-semibold mb-4">Granular Entries</h2>
+  <table mat-table [dataSource]="timesheet()?.entries || []" class="table w-full mb-6">
+    <ng-container matColumnDef="date">
+      <th mat-header-cell *matHeaderCellDef> Date </th>
+      <td mat-cell *matCellDef="let entry"> {{ entry.date }} </td>
+    </ng-container>
+    <ng-container matColumnDef="startTime">
+      <th mat-header-cell *matHeaderCellDef> Start </th>
+      <td mat-cell *matCellDef="let entry"> {{ entry.startTime }} </td>
+    </ng-container>
+    <ng-container matColumnDef="endTime">
+      <th mat-header-cell *matHeaderCellDef> End </th>
+      <td mat-cell *matCellDef="let entry"> {{ entry.endTime }} </td>
+    </ng-container>
+    <ng-container matColumnDef="hours">
+      <th mat-header-cell *matHeaderCellDef> Hours </th>
+      <td mat-cell *matCellDef="let entry"> {{ entry.hours }} </td>
+    </ng-container>
+    <ng-container matColumnDef="chargeCode">
+      <th mat-header-cell *matHeaderCellDef> Charge Code </th>
+      <td mat-cell *matCellDef="let entry"> {{ entry.chargeCode }} </td>
+    </ng-container>
+    <ng-container matColumnDef="description">
+      <th mat-header-cell *matHeaderCellDef> Description </th>
+      <td mat-cell *matCellDef="let entry"> {{ entry.description }} </td>
+    </ng-container>
+    <tr mat-header-row *matHeaderRowDef="entryColumns"></tr>
+    <tr mat-row *matRowDef="let row; columns: entryColumns;"></tr>
+  </table>
+  
   <h2 class="text-2xl font-semibold mb-4">Overall Summary</h2>
   <div class="grid grid-cols-2 gap-4 mb-6">
-    <p>Pay Rate: ${{ userRate() }}</p>
     <p>Total Hours: {{ timesheet()?.totalHours }}</p>
     <p>Gross Total: ${{ timesheet()?.grossTotal?.toFixed(2) }}</p>
+    <p>Pay Rate: ${{ userRate() }}</p>
     <p>Tax: ${{ timesheet()?.taxAmount?.toFixed(2) }}</p>
+    <p> </p>
     <p>Net Total: ${{ timesheet()?.netTotal?.toFixed(2) }}</p>
-    <p>Total Cost: ${{ timesheet()?.totalCost?.toFixed(2) }}</p>
   </div>
-
   <!-- Approve/Reject Form -->
   <form [formGroup]="reviewForm" (ngSubmit)="submitReview()" class="bg-white shadow-md rounded-lg p-6">
     <mat-radio-group formControlName="action" class="flex flex-col mb-4">
       <mat-radio-button value="approve">Approve</mat-radio-button>
       <mat-radio-button value="reject">Reject</mat-radio-button>
     </mat-radio-group>
-
     <mat-form-field appearance="outline" class="w-full" *ngIf="reviewForm.get('action')?.value === 'reject'">
       <mat-label>Rejection Reason</mat-label>
       <textarea matInput formControlName="rejectionReason" rows="3"></textarea>
       <mat-error *ngIf="reviewForm.get('rejectionReason')?.hasError('required')">Reason required for rejection</mat-error>
     </mat-form-field>
-
     <button mat-raised-button class="!bg-gray-700 !text-white px-4 py-2 !rounded-lg hover:!bg-gray-600 disabled:opacity-50 font-medium" type="submit" [disabled]="reviewForm.invalid">Submit</button>
   </form>
-</div>
+
+

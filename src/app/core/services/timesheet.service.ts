@@ -28,7 +28,7 @@ export class TimesheetService {
       status: data.status,
       totalHours: data.totalHours,
       totalCost: data.totalCost ?? 0,
-      owner: data.owner,
+      userId: data.userId,
       rejectionReason: data.rejectionReason ?? undefined,
       associatedChargeCodes: parsedAssoc,
       dailyAggregates: parsedDaily,
@@ -46,7 +46,7 @@ export class TimesheetService {
     if (!sub) throw new Error('User not authenticated');
 
     const filter = { 
-      owner: { eq: sub }, 
+      userId: { eq: sub }, 
       status: { eq: 'draft' },
       startDate: { eq: startDate }, 
       endDate: { eq: endDate },
@@ -61,7 +61,7 @@ export class TimesheetService {
 
     console.log('No draft found for period, creating a new one...');
     return await this.createTimesheet({
-      owner: sub,
+      userId: sub,
       totalHours: 0,
       status: 'draft',
       startDate,
@@ -102,7 +102,7 @@ export class TimesheetService {
 
   async listTimesheets(status?: 'draft' | 'submitted' | 'approved' | 'rejected', startDate?: string, endDate?: string): Promise<Timesheet[]> {
     const sub = await this.authService.getCurrentUserId();
-    const filter: any = { owner: { eq: sub! } };
+    const filter: any = { userId: { eq: sub! } };
     if (status) filter.status = { eq: status };
     if (startDate) filter.startDate = { eq: startDate };
     if (endDate) filter.endDate = { eq: endDate };
@@ -149,7 +149,7 @@ export class TimesheetService {
     const ts = await this.getTimesheetWithEntries(id);
     if (ts.status !== 'submitted') throw new Error('Only submitted timesheets can be approved');
 
-    const user = await this.authService.getUserById(ts.owner);
+    const user = await this.authService.getUserById(ts.userId);
     if (!user) throw new Error('User not found');
 
     let totalCost = 0;
@@ -216,7 +216,7 @@ export class TimesheetService {
 
   private async updateTotals(id: string): Promise<void> {
     const ts = await this.getTimesheetWithEntries(id);
-    const user = await this.authService.getUserById(ts.owner);
+    const user = await this.authService.getUserById(ts.userId);
     if (!user) throw new Error('User not found');
 
     const { dailyAggregates, grossTotal, taxAmount, netTotal } = await this.calculateAggregates(

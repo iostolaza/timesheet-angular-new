@@ -1,4 +1,3 @@
-
 // src/app/timesheet/review-form/review-form.component.ts
 
 import { Component, OnInit, inject, AfterViewInit, ViewChild } from '@angular/core';
@@ -20,6 +19,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatRadioModule } from '@angular/material/radio';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialogRef } from '@angular/material/dialog';
+import { UserProfile } from '../../core/models/user.model';
 
 @Component({
   standalone: true,
@@ -32,10 +32,12 @@ export class ReviewComponent implements OnInit, AfterViewInit {
   clientAggregates = signal<{chargeCode: string, totalHours: number, totalPay: number}[]>([]);
   dailyAggregates = signal<DailyAggregate[]>([]);
   userRate = signal<number>(0);
+  userProfile = signal<UserProfile | null>(null); 
+
+
   entryColumns = ['date', 'startTime', 'endTime', 'hours', 'chargeCode', 'description'];
   dailyColumns = ['date', 'base', 'ot', 'regPay', 'otPay', 'subtotal'];
   clientColumns = ['chargeCode', 'totalHours', 'totalPay'];
-
   calendarOptions: any = {
     plugins: [dayGridPlugin, timeGridPlugin],
     initialView: 'timeGridTwoWeek',
@@ -56,38 +58,34 @@ export class ReviewComponent implements OnInit, AfterViewInit {
     },
     events: [] as EventInput[],
   };
-
   reviewForm: FormGroup;
-
   private tsService = inject(TimesheetService);
   private authService = inject(AuthService);
   private fb = inject(FormBuilder);
   private dialogRef = inject(MatDialogRef<ReviewComponent>);
   private data = inject(MAT_DIALOG_DATA);
-
   constructor() {
     this.reviewForm = this.fb.group({
       action: ['approve', Validators.required],
       rejectionReason: [''],
     });
   }
-
   async ngOnInit() {
     const id = this.data.id;
     if (!id) {
       console.error('No timesheet ID provided');
       return;
     }
-
     console.log('Loading timesheet ID:', id);
     try {
       const ts = await this.tsService.getTimesheetWithEntries(id);
       console.log('Loaded timesheet:', ts);
       this.timesheet.set(ts);
 
-      const user = await this.authService.getUserById(ts.owner);
-      const rate = user?.rate || 25;
-      this.userRate.set(rate);
+      const user = await this.authService.getUserById(ts.userId);
+      this.userProfile.set(user);
+      this.userRate.set(user?.rate ?? 25);
+
 
       // Update calendar events
       this.calendarOptions = {
@@ -98,28 +96,24 @@ export class ReviewComponent implements OnInit, AfterViewInit {
           end: `${entry.date}T${entry.endTime}`,
         }))
       };
-
       // Daily aggregates (parse or compute)
       let daily = ts.dailyAggregates || [];
       if (daily.length === 0) {
-        daily = this.computeDailyAggregates(ts.entries, rate, 1.5, 0.015);
+        daily = this.computeDailyAggregates(ts.entries, this.userRate(), 1.5, 0.015);
       }
       this.dailyAggregates.set(daily);
-
       // Client aggregates
       const grouped = ts.entries.reduce((acc, e) => {
         if (!acc[e.chargeCode]) {
           acc[e.chargeCode] = { totalHours: 0, totalPay: 0 };
         }
         acc[e.chargeCode].totalHours += e.hours;
-        acc[e.chargeCode].totalPay += this.computeEntryPay(e.hours, rate, 1.5);
+        acc[e.chargeCode].totalPay += this.computeEntryPay(e.hours, this.userRate(), 1.5);
         return acc;
       }, {} as Record<string, {totalHours: number, totalPay: number}>);
-
       this.clientAggregates.set(
         Object.entries(grouped).map(([chargeCode, data]) => ({ chargeCode, ...data }))
       );
-
       // Conditional validators
       this.reviewForm.get('action')!.valueChanges.subscribe(value => {
         const reasonCtrl = this.reviewForm.get('rejectionReason');
@@ -134,11 +128,22 @@ export class ReviewComponent implements OnInit, AfterViewInit {
       console.error('Failed to load timesheet:', error);
     }
   }
-
   ngAfterViewInit() {
     if (this.calendarComponent) {
       this.calendarComponent.getApi().refetchEvents();
     }
+  }
+
+  displayedTimesheetIdSuffix() {
+    return this.timesheet()?.id?.slice(-6) ?? '';
+  }
+
+  userName() {
+    return this.userProfile()?.name ?? '';
+  }
+
+  userEmail() {
+    return this.userProfile()?.email ?? '';
   }
 
   private computeDailyAggregates(entries: TimesheetEntry[], rate: number, otMultiplier: number, taxRate: number): DailyAggregate[] {
@@ -147,7 +152,6 @@ export class ReviewComponent implements OnInit, AfterViewInit {
       acc[e.date].hours += e.hours;
       return acc;
     }, {} as Record<string, { hours: number }>);
-
     return Object.entries(grouped).map(([date, { hours }]) => {
       const base = Math.min(8, hours);
       const ot = Math.max(0, hours - 8);
@@ -156,13 +160,11 @@ export class ReviewComponent implements OnInit, AfterViewInit {
       return { date, base, ot, regPay, otPay, subtotal: regPay + otPay };
     });
   }
-
   private computeEntryPay(hours: number, rate: number, otMultiplier: number): number {
     const base = Math.min(8, hours);
     const ot = Math.max(0, hours - 8);
     return base * rate + ot * rate * otMultiplier;
   }
-
   submitReview() {
     if (this.reviewForm.valid) {
       const { action, rejectionReason } = this.reviewForm.value;

@@ -16,7 +16,7 @@ export interface Timesheet {
   entries: TimesheetEntry[];
   totalHours: number;
   totalCost?: number;
-  owner: string;
+  userId: string;
   rejectionReason?: string;
   associatedChargeCodes?: ChargeCode[];
   associatedChargeCodesJson?: string; 
@@ -38,5 +38,5 @@ export interface TimesheetEntry {
   hours: number;
   description: string;
   chargeCode: string;
-  owner: string;
+  userId: string;
 }

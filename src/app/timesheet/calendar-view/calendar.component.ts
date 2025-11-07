@@ -248,7 +248,7 @@ async handleSelect(info: any) {
         startTime: startStr,
         endTime: endStr,
         hours,
-        owner: sub ?? 'default-user',
+        userId: sub ?? 'default-user',
         chargeCode: ' ',
         description: ' ',
       };
@@ -551,7 +551,7 @@ async submitTimesheet() {
         totalHours: this.events().reduce((sum, e) => sum + e.hours, 0), // Full period
         totalCost: this.totalCost(),
         status: 'submitted' as const,
-        owner: sub ?? 'default-user',
+        userId: sub ?? 'default-user',
         associatedChargeCodes: uniqueChargeCodes,
       };
       await this.tsService.updateTimesheet(tsData);

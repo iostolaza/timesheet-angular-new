@@ -73,7 +73,7 @@ const schema = a.schema({
       status: a.enum(['draft', 'submitted', 'approved', 'rejected']),
       totalHours: a.float().required(),
       totalCost: a.float(),
-      owner: a.string().required(),
+      userId: a.string().required(),
       rejectionReason: a.string(),
       associatedChargeCodesJson: a.string().default('[]'),
       dailyAggregatesJson: a.string().default('[]'),
@@ -102,7 +102,7 @@ const schema = a.schema({
       hours: a.float().required(),
       description: a.string().required(),
       chargeCode: a.string().required(),
-      owner: a.string().required(),
+      userId: a.string().required(),
     })
     .authorization(allow => [
       allow.owner().to(['create', 'read', 'update', 'delete']),
