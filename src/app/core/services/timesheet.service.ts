@@ -214,7 +214,7 @@ export class TimesheetService {
     return { dailyAggregates, grossTotal, taxAmount, netTotal };
   }
 
-  private async updateTotals(id: string): Promise<void> {
+  public async updateTotals(id: string): Promise<void> {
     const ts = await this.getTimesheetWithEntries(id);
     const user = await this.authService.getUserById(ts.userId);
     if (!user) throw new Error('User not found');

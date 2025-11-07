@@ -17,9 +17,14 @@
 
     <p class="text-gray-600 mb-6">Status: <strong>{{ timesheet()?.status }}</strong></p>
 
-  <div class="bg-white shadow-md rounded-lg p-6 mb-6 overflow-x-auto">
+  <div class="bg-white shadow-md rounded-lg p-6 mb-6 overflow-x-auto" *ngIf="timesheet(); else loadingCalendar">
     <full-calendar [options]="calendarOptions"></full-calendar>
   </div>
+  <ng-template #loadingCalendar>
+    <div class="bg-white shadow-md rounded-lg p-6 mb-6 overflow-x-auto text-center">
+      Loading timesheet data...
+    </div>
+  </ng-template>
 
   <h2 class="text-2xl font-semibold mb-4">Daily Aggregates</h2>
   <table mat-table [dataSource]="dailyAggregates()" class="table w-full mb-6">
@@ -119,7 +124,10 @@
       <textarea matInput formControlName="rejectionReason" rows="3"></textarea>
       <mat-error *ngIf="reviewForm.get('rejectionReason')?.hasError('required')">Reason required for rejection</mat-error>
     </mat-form-field>
+   <div class="flex space-x-4">
+    <button mat-raised-button class="!bg-blue-700 !text-white px-4 py-2 !rounded-lg hover:!bg-blue-600 font-medium" (click)="saveChanges()" *ngIf="allowEdit()">Save Changes</button>
     <button mat-raised-button class="!bg-gray-700 !text-white px-4 py-2 !rounded-lg hover:!bg-gray-600 disabled:opacity-50 font-medium" type="submit" [disabled]="reviewForm.invalid">Submit</button>
+  </div>
   </form>
 
 
