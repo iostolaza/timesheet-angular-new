@@ -1,4 +1,3 @@
-
 // src/app/timesheet/review-form/review-form.component.ts
 
 import {
@@ -73,8 +72,8 @@ export class ReviewComponent implements OnInit, AfterViewInit {
   dailyColumns = ['date', 'base', 'ot', 'regPay', 'otPay', 'subtotal'];
   clientColumns = ['chargeCode', 'totalHours', 'totalPay'];
 
-  // --- Calendar Options ---
-  calendarOptions: any = {
+  // --- Calendar Options as signal for reactive updates
+  calendarOptions = signal<any>({
     plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
     initialView: 'timeGridTwoWeek',
     views: {
@@ -108,7 +107,17 @@ export class ReviewComponent implements OnInit, AfterViewInit {
         },
       },
     ],
-  };
+    editable: false, // Default, updated later
+    selectable: false,
+    select: undefined,
+    eventClick: undefined,
+    eventDrop: undefined,
+    eventResize: undefined,
+    eventOverlap: true,
+    slotEventOverlap: false,
+    allDaySlot: false,
+    snapDuration: '00:15:00',
+  });
 
   // --- Form ---
   reviewForm: FormGroup;
@@ -204,16 +213,16 @@ export class ReviewComponent implements OnInit, AfterViewInit {
       // Load charge codes
       await this.loadChargeCodes();
 
-      // Configure calendar interactivity
-      this.calendarOptions = {
-        ...this.calendarOptions,
+      // Update calendar options reactively
+      this.calendarOptions.update(opts => ({
+        ...opts,
         editable: this.allowEdit(),
         selectable: this.allowEdit(),
         select: this.allowEdit() ? this.handleSelect.bind(this) : undefined,
         eventClick: this.allowEdit() ? this.handleEventClick.bind(this) : undefined,
         eventDrop: this.allowEdit() ? this.handleEventDrop.bind(this) : undefined,
         eventResize: this.allowEdit() ? this.handleEventResize.bind(this) : undefined,
-      };
+      }));
 
       await this.loadEvents();
     } catch (error: any) {

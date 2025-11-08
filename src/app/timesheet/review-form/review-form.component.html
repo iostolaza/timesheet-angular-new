@@ -18,7 +18,7 @@
     <p class="text-gray-600 mb-6">Status: <strong>{{ timesheet()?.status }}</strong></p>
 
   <div class="bg-white shadow-md rounded-lg p-6 mb-6 overflow-x-auto" *ngIf="timesheet(); else loadingCalendar">
-    <full-calendar [options]="calendarOptions"></full-calendar>
+    <full-calendar [options]="calendarOptions()"></full-calendar>
   </div>
   <ng-template #loadingCalendar>
     <div class="bg-white shadow-md rounded-lg p-6 mb-6 overflow-x-auto text-center">
