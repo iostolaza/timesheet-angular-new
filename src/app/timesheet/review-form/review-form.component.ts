@@ -1,57 +1,81 @@
 
 // src/app/timesheet/review-form/review-form.component.ts
 
-
-import { Component, OnInit, inject, AfterViewInit, ViewChild, ChangeDetectorRef } from '@angular/core';
-import { MAT_DIALOG_DATA } from '@angular/material/dialog';
-import { TimesheetService } from '../../core/services/timesheet.service';
-import { AuthService } from '../../core/services/auth.service';
-import { FinancialService } from '../../core/services/financial.service';
-import { FullCalendarModule, FullCalendarComponent } from '@fullcalendar/angular';
-import { EventInput } from '@fullcalendar/core';
-import dayGridPlugin from '@fullcalendar/daygrid';
-import timeGridPlugin from '@fullcalendar/timegrid';
-import interactionPlugin from '@fullcalendar/interaction';
+import {
+  Component,
+  OnInit,
+  inject,
+  AfterViewInit,
+  ViewChild,
+  ChangeDetectorRef,
+  signal,
+  ChangeDetectionStrategy
+} from '@angular/core';
+import { MAT_DIALOG_DATA, MatDialogRef, MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { MatTableModule } from '@angular/material/table';
-import { Timesheet, DailyAggregate, TimesheetEntry } from '../../core/models/timesheet.model';
-import { ChargeCode } from '../../core/models/financial.model';
-import { format, parse } from 'date-fns';
-import { signal } from '@angular/core';
-import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatRadioModule } from '@angular/material/radio';
 import { MatButtonModule } from '@angular/material/button';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { MatDialog, MatDialogModule } from '@angular/material/dialog';
-import { MatDialogRef } from '@angular/material/dialog';
+import { MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatDialogModule } from '@angular/material/dialog';
+
+import { FullCalendarModule, FullCalendarComponent } from '@fullcalendar/angular';
+import dayGridPlugin from '@fullcalendar/daygrid';
+import timeGridPlugin from '@fullcalendar/timegrid';
+import interactionPlugin from '@fullcalendar/interaction';
+
+import { TimesheetService } from '../../core/services/timesheet.service';
+import { AuthService } from '../../core/services/auth.service';
+import { FinancialService } from '../../core/services/financial.service';
+import { Timesheet, DailyAggregate, TimesheetEntry } from '../../core/models/timesheet.model';
+import { ChargeCode } from '../../core/models/financial.model';
 import { UserProfile } from '../../core/models/user.model';
-import { DayEntryDialogComponent } from '../calendar-view/day-entry-dialog.component'; // Adjust path as needed
+import { DayEntryDialogComponent } from '../calendar-view/day-entry-dialog.component';
 
 @Component({
   standalone: true,
-  imports: [CommonModule, FullCalendarModule, MatTableModule, ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatRadioModule, MatButtonModule, MatSnackBarModule, MatDialogModule],
+  imports: [
+    CommonModule,
+    FullCalendarModule,
+    MatTableModule,
+    ReactiveFormsModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatRadioModule,
+    MatButtonModule,
+    MatSnackBarModule,
+    MatDialogModule
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './review-form.component.html',
 })
 export class ReviewComponent implements OnInit, AfterViewInit {
   @ViewChild('calendar') calendarComponent!: FullCalendarComponent;
+
+  // --- Signals ---
   timesheet = signal<Timesheet | null>(null);
   events = signal<TimesheetEntry[]>([]);
   chargeCodes = signal<ChargeCode[]>([]);
-  clientAggregates = signal<{chargeCode: string, totalHours: number, totalPay: number}[]>([]);
+  clientAggregates = signal<{ chargeCode: string, totalHours: number, totalPay: number }[]>([]);
   dailyAggregates = signal<DailyAggregate[]>([]);
   userRate = signal<number>(0);
   otMultiplier = signal<number>(1.5);
   taxRate = signal<number>(0.015);
   allowEdit = signal<boolean>(false);
-  userProfile = signal<UserProfile | null>(null); 
+  userProfile = signal<UserProfile | null>(null);
 
+  // --- Table Columns ---
   entryColumns = ['date', 'startTime', 'endTime', 'hours', 'chargeCode', 'description'];
   dailyColumns = ['date', 'base', 'ot', 'regPay', 'otPay', 'subtotal'];
   clientColumns = ['chargeCode', 'totalHours', 'totalPay'];
+
+  // --- Calendar Options ---
   calendarOptions: any = {
-    plugins: [dayGridPlugin, timeGridPlugin],
+    plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
     initialView: 'timeGridTwoWeek',
     views: {
       timeGridTwoWeek: {
@@ -73,9 +97,11 @@ export class ReviewComponent implements OnInit, AfterViewInit {
           successCallback(
             this.events().map(entry => ({
               id: entry.id,
-              title: `${entry.chargeCode}: ${entry.description}`,
+              title: `${entry.chargeCode || ''}: ${entry.description || ''}`,
               start: `${entry.date}T${entry.startTime}`,
               end: `${entry.date}T${entry.endTime}`,
+              backgroundColor: '#00B0FF',
+              borderColor: '#00B0FF',
               extendedProps: { entry },
             }))
           );
@@ -83,7 +109,11 @@ export class ReviewComponent implements OnInit, AfterViewInit {
       },
     ],
   };
+
+  // --- Form ---
   reviewForm: FormGroup;
+
+  // --- Services ---
   private tsService = inject(TimesheetService);
   private authService = inject(AuthService);
   private financialService = inject(FinancialService);
@@ -101,155 +131,154 @@ export class ReviewComponent implements OnInit, AfterViewInit {
     });
   }
 
-async ngOnInit() {
-  this.loadData();
-}
-
-private async loadData() {
-  const id = this.data.id;
-  if (!id) {
-    console.error('No timesheet ID provided');
-    return;
-  }
-  console.log('Loading timesheet ID:', id);
-  try {
-    const tsFull = await this.tsService.getTimesheetWithEntries(id);
-    const user = await this.authService.getUserById(tsFull.userId);
-    this.userProfile.set(user);
-    this.userRate.set(user?.rate ?? 25);
-    this.otMultiplier.set(user?.otMultiplier ?? 1.5);
-    this.taxRate.set(user?.taxRate ?? 0.015);
-
-    // Set full data with rates now available
-    this.timesheet.set(tsFull);
-    this.events.set(tsFull.entries);
-
-    let daily = tsFull.dailyAggregates || [];
-    if (daily.length === 0) {
-      daily = this.computeDailyAggregates(tsFull.entries, this.userRate(), this.otMultiplier(), this.taxRate());
-    }
-    this.dailyAggregates.set(daily);
-
-    const grouped = tsFull.entries.reduce((acc, e) => {
-      if (!acc[e.chargeCode]) {
-        acc[e.chargeCode] = { totalHours: 0, totalPay: 0 };
-      }
-      acc[e.chargeCode].totalHours += e.hours;
-      acc[e.chargeCode].totalPay += this.computeEntryPay(e.hours, this.userRate(), this.otMultiplier());
-      return acc;
-    }, {} as Record<string, {totalHours: number, totalPay: number}>);
-    this.clientAggregates.set(
-      Object.entries(grouped).map(([chargeCode, data]) => ({ chargeCode, ...data }))
-    );
-
-    this.allowEdit.set(['submitted', 'rejected'].includes(tsFull.status));
-
-    await this.loadChargeCodes();
-
-    if (this.allowEdit()) {
-      // Create new options object to trigger change detection
-      this.calendarOptions = {
-        ...this.calendarOptions,
-        plugins: [...this.calendarOptions.plugins, interactionPlugin],
-        editable: true,
-        selectable: true,
-        selectMirror: true,
-        allDaySlot: false,
-        snapDuration: '00:15:00',
-        eventOverlap: true,
-        slotEventOverlap: false,
-        select: this.handleSelect.bind(this),
-        eventClick: this.handleEventClick.bind(this),
-        eventDrop: this.handleEventDrop.bind(this),
-        eventResize: this.handleEventResize.bind(this),
-        eventDidMount: (info: any) => {
-          info.el.addEventListener('contextmenu', (e: MouseEvent) => {
-            e.preventDefault();
-            if (confirm('Delete this entry?')) {
-              const entry = info.event.extendedProps.entry;
-              if (entry) {
-                this.handleDelete(entry);
-              }
-            }
-          });
-        },
-      };
+  // ----------------------
+  // Lifecycle Hooks
+  // ----------------------
+  async ngOnInit() {
+    try {
+      await this.loadData();
+      console.log('Initialized review component', {
+        userEmail: this.userEmail(),
+        timesheetId: this.timesheet()?.id,
+      });
+    } catch (error) {
+      console.error('Failed to initialize component', error);
+      this.openError('Failed to initialize timesheet. Please try again.');
     }
 
-    // Conditional validators
     this.reviewForm.get('action')!.valueChanges.subscribe(value => {
       const reasonCtrl = this.reviewForm.get('rejectionReason');
-      if (value === 'reject') {
-        reasonCtrl!.setValidators([Validators.required]);
-      } else {
-        reasonCtrl!.clearValidators();
-      }
+      if (value === 'reject') reasonCtrl!.setValidators([Validators.required]);
+      else reasonCtrl!.clearValidators();
       reasonCtrl!.updateValueAndValidity();
     });
-
-    // Force change detection after data load (triggers *ngIf)
-    this.cdr.detectChanges();
-  } catch (error) {
-    console.error('Failed to load timesheet:', error);
   }
-}
 
   ngAfterViewInit() {
-    if (this.calendarComponent) {
-      this.calendarComponent.getApi().refetchEvents();
+    this.refreshCalendar();
+  }
+
+  // ----------------------
+  // Calendar Helpers
+  // ----------------------
+  private get calendarApi() {
+    return this.calendarComponent?.getApi() ?? null;
+  }
+
+  private refreshCalendar() {
+    const api = this.calendarApi;
+    if (api) {
+      api.updateSize(); // Fix layout issues in dialog
+      api.refetchEvents();
+      const startDate = this.timesheet()?.startDate;
+      if (startDate) {
+        api.gotoDate(startDate);
+        console.log('Navigated calendar to startDate:', startDate);
+      }
+    } else {
+      setTimeout(() => this.refreshCalendar(), 100);
     }
   }
 
-  displayedTimesheetIdSuffix() {
-    return this.timesheet()?.id?.slice(-6) ?? '';
-  }
+  // ----------------------
+  // Data Loading
+  // ----------------------
+  private async loadData() {
+    const id = this.data.id;
+    if (!id) return;
 
-  userName() {
-    return this.userProfile()?.name ?? '';
-  }
+    try {
+      const tsFull = await this.tsService.getTimesheetWithEntries(id);
+      const user = await this.authService.getUserById(tsFull.userId);
 
-  userEmail() {
-    return this.userProfile()?.email ?? '';
+      // Signals
+      this.userProfile.set(user);
+      this.userRate.set(user?.rate ?? 25);
+      this.otMultiplier.set(user?.otMultiplier ?? 1.5);
+      this.taxRate.set(user?.taxRate ?? 0.015);
+      this.timesheet.set(tsFull);
+
+      // Permissions
+      this.allowEdit.set(['submitted', 'rejected'].includes(tsFull.status));
+
+      // Load charge codes
+      await this.loadChargeCodes();
+
+      // Configure calendar interactivity
+      this.calendarOptions = {
+        ...this.calendarOptions,
+        editable: this.allowEdit(),
+        selectable: this.allowEdit(),
+        select: this.allowEdit() ? this.handleSelect.bind(this) : undefined,
+        eventClick: this.allowEdit() ? this.handleEventClick.bind(this) : undefined,
+        eventDrop: this.allowEdit() ? this.handleEventDrop.bind(this) : undefined,
+        eventResize: this.allowEdit() ? this.handleEventResize.bind(this) : undefined,
+      };
+
+      await this.loadEvents();
+    } catch (error: any) {
+      console.error(error);
+      this.openError('Failed to load timesheet data.');
+    }
   }
 
   private async loadChargeCodes() {
     try {
       const accounts = await this.financialService.listAccounts();
-      this.chargeCodes.set(accounts.flatMap(account => account.chargeCodes || []));
+      this.chargeCodes.set(accounts.flatMap(a => a.chargeCodes || []));
+      console.log('Loaded charge codes', { count: this.chargeCodes().length });
     } catch (error) {
       console.error('Failed to load charge codes', error);
       this.openError('Failed to load charge codes. Please refresh.');
     }
   }
 
-  private async refreshData() {
-    const id = this.data.id;
-    if (!id) return;
-    const ts = await this.tsService.getTimesheetWithEntries(id);
-    this.timesheet.set(ts);
-    this.events.set(ts.entries);
+  async loadEvents() {
+    try {
+      const tsId = this.timesheet()?.id;
+      if (!tsId) throw new Error('No timesheet ID available');
 
-    let daily = ts.dailyAggregates || [];
-    if (daily.length === 0) {
-      daily = this.computeDailyAggregates(ts.entries, this.userRate(), this.otMultiplier(), this.taxRate());
+      const tsWithEntries = await this.tsService.getTimesheetWithEntries(tsId);  
+      this.events.set(tsWithEntries.entries);
+      this.updateAggregates();
+      console.log('Loaded timesheet events', { count: this.events().length });
+      this.cdr.markForCheck();
+
+      this.refreshCalendar(); // Ensure refresh after data set
+    } catch (error) {
+      console.error('Failed to load events', error);
+      this.openError('Failed to load events. Please refresh.');
     }
+  }
+
+  // ----------------------
+  // Calculations
+  // ----------------------
+  private updateAggregates() {
+    const entries = this.events();
+
+    // Daily aggregates
+    const daily = this.computeDailyAggregates(entries, this.userRate(), this.otMultiplier(), this.taxRate());
     this.dailyAggregates.set(daily);
 
-    const grouped = ts.entries.reduce((acc, e) => {
-      if (!acc[e.chargeCode]) {
-        acc[e.chargeCode] = { totalHours: 0, totalPay: 0 };
-      }
+    // Client aggregates
+    const grouped = entries.reduce((acc, e) => {
+      if (!acc[e.chargeCode]) acc[e.chargeCode] = { totalHours: 0, totalPay: 0 };
       acc[e.chargeCode].totalHours += e.hours;
       acc[e.chargeCode].totalPay += this.computeEntryPay(e.hours, this.userRate(), this.otMultiplier());
       return acc;
-    }, {} as Record<string, {totalHours: number, totalPay: number}>);
-    this.clientAggregates.set(
-      Object.entries(grouped).map(([chargeCode, data]) => ({ chargeCode, ...data }))
-    );
+    }, {} as Record<string, { totalHours: number; totalPay: number }>);
+    this.clientAggregates.set(Object.entries(grouped).map(([chargeCode, data]) => ({ chargeCode, ...data })));
+
+    // Optional: Update timesheet totals locally
+    const totalHours = entries.reduce((sum, e) => sum + e.hours, 0);
+    this.timesheet.update(ts => ts ? { ...ts, totalHours } : ts);
+
+    console.log('Updated aggregates', {
+      dailyCount: this.dailyAggregates().length,
+      clientCount: this.clientAggregates().length,
+    });
     this.cdr.markForCheck();
-    if (this.calendarComponent) {
-      this.calendarComponent.getApi().refetchEvents();
-    }
   }
 
   private computeDailyAggregates(entries: TimesheetEntry[], rate: number, otMultiplier: number, taxRate: number): DailyAggregate[] {
@@ -266,6 +295,7 @@ private async loadData() {
       return { date, base, ot, regPay, otPay, subtotal: regPay + otPay };
     });
   }
+
   private computeEntryPay(hours: number, rate: number, otMultiplier: number): number {
     const base = Math.min(8, hours);
     const ot = Math.max(0, hours - 8);
@@ -277,32 +307,39 @@ private async loadData() {
     return Math.max(0, hours);
   }
 
+  displayedTimesheetIdSuffix() { return this.timesheet()?.id?.slice(-6) ?? ''; }
+  userName() { return this.userProfile()?.name ?? ''; }
+  userEmail() { return this.userProfile()?.email ?? ''; }
+
+  // ----------------------
+  // Event Handlers
+  // ----------------------
   async handleSelect(info: any) {
     if (!this.allowEdit()) return;
     try {
-      const dateStr = info.startStr.split('T')[0];
-      const startStr = info.startStr.split('T')[1].substring(0, 5);
-      const endStr = info.endStr.split('T')[1].substring(0, 5);
+      const date = info.startStr.split('T')[0];
+      const startTime = info.startStr.split('T')[1]?.substring(0, 5) || '08:00';
+      const endTime = info.endStr.split('T')[1]?.substring(0, 5) || '17:00';
       const hours = this.computeHoursDiff(info.start, info.end);
 
       const timesheetId = this.timesheet()!.id;
-      const userId = this.timesheet()!.userId;
-
       const entryData: Omit<TimesheetEntry, 'id'> = {
         timesheetId,
-        date: dateStr,
-        startTime: startStr,
-        endTime: endStr,
+        date,
+        startTime,
+        endTime,
         hours,
-        userId,
+        userId: this.timesheet()!.userId,
         chargeCode: ' ',
         description: ' ',
       };
 
       const savedEntry = await this.tsService.addEntry(entryData, timesheetId);
+      this.events.update(entries => [...entries, savedEntry]);
       await this.tsService.updateTotals(timesheetId);
-      await this.refreshData();
-      this.openSuccess('Entry created. Editing details...');
+      this.updateAggregates();
+      this.openSuccess('Entry created. Edit details now.');
+      console.log('Added entry', { entryId: savedEntry.id });
 
       const dialogRef = this.dialog.open(DayEntryDialogComponent, {
         width: '400px',
@@ -312,20 +349,34 @@ private async loadData() {
       dialogRef.afterClosed().subscribe(async (result: TimesheetEntry | 'delete' | undefined) => {
         if (result === 'delete') {
           await this.handleDelete(savedEntry);
-        } else if (result) {
-          await this.tsService.updateEntry(result, timesheetId!);
-          await this.tsService.updateTotals(timesheetId);
-          await this.refreshData();
-          this.openSuccess('Entry updated.');
-        } else {
-          if (!savedEntry.chargeCode || savedEntry.chargeCode.trim() === ' ') {
-            this.openError('Charge code is required. Click the entry to edit.');
-          }
+          return;
         }
+        if (result) {
+          await this.tsService.updateEntry(result, timesheetId);
+          await this.tsService.updateTotals(timesheetId);
+          this.events.update(evts => evts.map(e => e.id === result.id ? result : e));
+          this.updateAggregates();
+          this.openSuccess('Entry updated.');
+          console.log('Updated entry', { entryId: result.id });
+        } else if (!savedEntry.chargeCode?.trim()) {
+          this.openError('Charge code required. Click entry to edit.');
+        }
+        this.cdr.markForCheck();
+        this.calendarApi?.refetchEvents();
       });
     } catch (error: any) {
+      console.error('Failed to handle select', error);
       this.openError(error.message || 'Failed to create entry. Please try again.');
     } finally {
+      this.cdr.markForCheck();
+      const calendarApi = this.calendarComponent?.getApi();
+      if (calendarApi) {
+        try {
+          calendarApi.refetchEvents();
+        } catch (error) {
+          console.error('Failed to refetch events after select', error);
+        }
+      }
       info.view.calendar.unselect();
     }
   }
@@ -333,7 +384,10 @@ private async loadData() {
   async handleEventClick(info: any) {
     if (!this.allowEdit()) return;
     const entry = info.event.extendedProps.entry;
-    if (!entry) return;
+    if (!entry) {
+      console.error('No entry found for event', { eventId: info.event.id });
+      return;
+    }
 
     const dialogRef = this.dialog.open(DayEntryDialogComponent, {
       width: '400px',
@@ -343,26 +397,27 @@ private async loadData() {
     dialogRef.afterClosed().subscribe(async (result: TimesheetEntry | 'delete' | undefined) => {
       const timesheetId = this.timesheet()!.id;
       if (result === 'delete') {
-        await this.tsService.deleteEntry(entry.id, timesheetId);
-        await this.tsService.updateTotals(timesheetId);
-        await this.refreshData();
-        this.openSuccess('Entry deleted.');
-      } else if (result) {
+        await this.handleDelete(entry);
+        return;
+      }
+      if (result) {
         await this.tsService.updateEntry(result, timesheetId);
         await this.tsService.updateTotals(timesheetId);
-        await this.refreshData();
+        this.events.update(evts => evts.map(e => e.id === result.id ? result : e));
+        this.updateAggregates();
         this.openSuccess('Entry updated.');
+        console.log('Updated entry', { entryId: result.id });
       }
+      this.cdr.markForCheck();
+      this.calendarApi?.refetchEvents();
     });
   }
 
   async handleEventDrop(info: any) {
-    if (!this.allowEdit()) {
-      info.revert();
-      return;
-    }
+    if (!this.allowEdit()) { info.revert(); return; }
     const entry = info.event.extendedProps.entry;
     if (!entry) {
+      console.error('No entry found for event drop', { eventId: info.event.id });
       info.revert();
       return;
     }
@@ -377,83 +432,129 @@ private async loadData() {
       const timesheetId = this.timesheet()!.id;
       await this.tsService.updateEntry(updatedEntry, timesheetId);
       await this.tsService.updateTotals(timesheetId);
-      await this.refreshData();
+      this.events.update(events => events.map(e => e.id === entry.id ? updatedEntry : e));
+      this.updateAggregates();
+      console.log('Moved entry', { entryId: entry.id });
     } catch (error: any) {
+      console.error('Failed to handle event drop', error);
       this.openError(error.message || 'Failed to move entry. Please try again.');
       info.revert();
+    } finally {
+      this.cdr.markForCheck();
+      const calendarApi = this.calendarComponent?.getApi();
+      if (calendarApi) {
+        try {
+          calendarApi.refetchEvents();
+        } catch (error) {
+          console.error('Failed to refetch events after drop', error);
+        }
+      }
     }
   }
 
   async handleEventResize(info: any) {
-    if (!this.allowEdit()) {
-      info.revert();
-      return;
-    }
+    if (!this.allowEdit()) { info.revert(); return; }
     const entry = info.event.extendedProps.entry;
     if (!entry) {
+      console.error('No entry found for event resize', { eventId: info.event.id });
       info.revert();
       return;
     }
 
     try {
-      const newStart = info.event.startStr.split('T')[1]?.substring(0, 5) || entry.startTime;
-      const newEnd = info.event.endStr.split('T')[1]?.substring(0, 5) || entry.endTime;
+      const startTime = info.event.startStr.split('T')[1]?.substring(0, 5) || entry.startTime;
+      const endTime = info.event.endStr.split('T')[1]?.substring(0, 5) || entry.endTime;
       const hours = this.computeHoursDiff(new Date(info.event.start), new Date(info.event.end));
-      const updatedEntry = { ...entry, startTime: newStart, endTime: newEnd, hours };
+      const updatedEntry = { ...entry, startTime, endTime, hours };
 
       const timesheetId = this.timesheet()!.id;
       await this.tsService.updateEntry(updatedEntry, timesheetId);
       await this.tsService.updateTotals(timesheetId);
-      await this.refreshData();
+      this.events.update(events => events.map(e => e.id === entry.id ? updatedEntry : e));
+      this.updateAggregates();
+      console.log('Resized entry', { entryId: entry.id });
     } catch (error: any) {
+      console.error('Failed to handle event resize', error);
       this.openError(error.message || 'Failed to resize entry. Please try again.');
       info.revert();
+    } finally {
+      this.cdr.markForCheck();
+      const calendarApi = this.calendarComponent?.getApi();
+      if (calendarApi) {
+        try {
+          calendarApi.refetchEvents();
+        } catch (error) {
+          console.error('Failed to refetch events after resize', error);
+        }
+      }
     }
   }
 
   private async handleDelete(entry: TimesheetEntry) {
     if (!this.allowEdit()) return;
+
     try {
       const timesheetId = this.timesheet()!.id;
+      if (!timesheetId) throw new Error('No timesheet ID');
+
+      // Delete from backend
       await this.tsService.deleteEntry(entry.id, timesheetId);
       await this.tsService.updateTotals(timesheetId);
-      await this.refreshData();
+
+      // Update signal
+      this.events.update(evts => evts.filter(e => e.id !== entry.id));
+
+      // Update aggregates locally
+      this.updateAggregates();
+
       this.openSuccess('Entry deleted.');
+      console.log('Deleted entry', { entryId: entry.id });
     } catch (error: any) {
+      console.error('Failed to delete entry', error);
       this.openError(error.message || 'Failed to delete entry. Please try again.');
+    } finally {
+      this.cdr.markForCheck();
+      const calendarApi = this.calendarComponent?.getApi();
+      if (calendarApi) {
+        try {
+          calendarApi.refetchEvents();
+        } catch (error) {
+          console.error('Failed to refetch events after delete', error);
+        }
+      }
     }
   }
 
+  // ----------------------
+  // Review & Save
+  // ----------------------
   submitReview() {
-    if (this.reviewForm.valid) {
-      const { action, rejectionReason } = this.reviewForm.value;
-      this.dialogRef.close({ approved: action === 'approve', rejectionReason });
-    }
+    if (!this.reviewForm.valid) return;
+    const { action, rejectionReason } = this.reviewForm.value;
+    this.dialogRef.close({ approved: action === 'approve', rejectionReason });
   }
 
   async saveChanges() {
-  try {
-    await this.tsService.updateTotals(this.timesheet()!.id);
-    await this.refreshData();
-    this.openSuccess('Changes saved.');
-  } catch (error) {
-    this.openError('Failed to save changes.');
+    try {
+      const timesheetId = this.timesheet()!.id;
+      await this.tsService.updateTotals(timesheetId);
+      this.updateAggregates();
+      this.openSuccess('Changes saved.');
+    } catch (error: any) {
+      this.openError(error.message || 'Failed to save changes.');
+    } finally {
+      this.cdr.markForCheck();
+    }
   }
-}
 
+  // ----------------------
+  // Snackbars
+  // ----------------------
   private openError(message: string) {
-    this.snackBar.open(message, 'Close', {
-      duration: 7000,
-      horizontalPosition: 'center',
-      verticalPosition: 'top',
-    });
+    this.snackBar.open(message, 'Close', { duration: 7000, horizontalPosition: 'center', verticalPosition: 'top' });
   }
 
   private openSuccess(message: string) {
-    this.snackBar.open(message, 'OK', {
-      duration: 3000,
-      horizontalPosition: 'center',
-      verticalPosition: 'top',
-    });
+    this.snackBar.open(message, 'OK', { duration: 3000, horizontalPosition: 'center', verticalPosition: 'top' });
   }
 }

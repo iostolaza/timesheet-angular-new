@@ -1,4 +1,4 @@
-// file: src/app/core/models/timesheet.model.ts
+//src/app/core/models/timesheet.model.ts
 import { ChargeCode } from './financial.model';
 
 export interface DailyAggregate {
