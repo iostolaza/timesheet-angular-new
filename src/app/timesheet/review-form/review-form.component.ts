@@ -66,6 +66,7 @@ export class ReviewComponent implements OnInit, AfterViewInit {
   taxRate = signal<number>(0.015);
   allowEdit = signal<boolean>(false);
   userProfile = signal<UserProfile | null>(null);
+  dataLoaded = signal<boolean>(false); // Flag to track if data is fully loaded
 
   // --- Table Columns ---
   entryColumns = ['date', 'startTime', 'endTime', 'hours', 'chargeCode', 'description'];
@@ -225,6 +226,7 @@ export class ReviewComponent implements OnInit, AfterViewInit {
       }));
 
       await this.loadEvents();
+      this.refreshCalendar(); // Refresh after events loaded
     } catch (error: any) {
       console.error(error);
       this.openError('Failed to load timesheet data.');
