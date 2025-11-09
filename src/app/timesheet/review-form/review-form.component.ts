@@ -66,7 +66,6 @@ export class ReviewComponent implements OnInit, AfterViewInit {
   taxRate = signal<number>(0.015);
   allowEdit = signal<boolean>(false);
   userProfile = signal<UserProfile | null>(null);
-  dataLoaded = signal<boolean>(false); // Flag to track if data is fully loaded
 
   // --- Table Columns ---
   entryColumns = ['date', 'startTime', 'endTime', 'hours', 'chargeCode', 'description'];
@@ -146,7 +145,7 @@ export class ReviewComponent implements OnInit, AfterViewInit {
   // ----------------------
   async ngOnInit() {
     try {
-      await this.loadData();
+      await this.loadAllData();
       console.log('Initialized review component', {
         userEmail: this.userEmail(),
         timesheetId: this.timesheet()?.id,
@@ -191,15 +190,18 @@ export class ReviewComponent implements OnInit, AfterViewInit {
   }
 
   // ----------------------
-  // Data Loading
+  // Data Loading - Simplified to single method with Parallel loads
   // ----------------------
-  private async loadData() {
+  private async loadAllData() {
     const id = this.data.id;
     if (!id) return;
 
     try {
       const tsFull = await this.tsService.getTimesheetWithEntries(id);
-      const user = await this.authService.getUserById(tsFull.userId);
+      const [user, accounts] = await Promise.all([
+        this.authService.getUserById(tsFull.userId),
+        this.financialService.listAccounts()
+      ]);
 
       // Signals
       this.userProfile.set(user);
@@ -207,12 +209,11 @@ export class ReviewComponent implements OnInit, AfterViewInit {
       this.otMultiplier.set(user?.otMultiplier ?? 1.5);
       this.taxRate.set(user?.taxRate ?? 0.015);
       this.timesheet.set(tsFull);
+      this.events.set(tsFull.entries);
+      this.chargeCodes.set(accounts.flatMap(a => a.chargeCodes || []));
 
       // Permissions
       this.allowEdit.set(['submitted', 'rejected'].includes(tsFull.status));
-
-      // Load charge codes
-      await this.loadChargeCodes();
 
       // Update calendar options reactively
       this.calendarOptions.update(opts => ({
@@ -225,40 +226,14 @@ export class ReviewComponent implements OnInit, AfterViewInit {
         eventResize: this.allowEdit() ? this.handleEventResize.bind(this) : undefined,
       }));
 
-      await this.loadEvents();
-      this.refreshCalendar(); // Refresh after events loaded
+      // Aggregates
+      this.updateAggregates();
+
+      this.cdr.markForCheck();
+      this.refreshCalendar();
     } catch (error: any) {
       console.error(error);
       this.openError('Failed to load timesheet data.');
-    }
-  }
-
-  private async loadChargeCodes() {
-    try {
-      const accounts = await this.financialService.listAccounts();
-      this.chargeCodes.set(accounts.flatMap(a => a.chargeCodes || []));
-      console.log('Loaded charge codes', { count: this.chargeCodes().length });
-    } catch (error) {
-      console.error('Failed to load charge codes', error);
-      this.openError('Failed to load charge codes. Please refresh.');
-    }
-  }
-
-  async loadEvents() {
-    try {
-      const tsId = this.timesheet()?.id;
-      if (!tsId) throw new Error('No timesheet ID available');
-
-      const tsWithEntries = await this.tsService.getTimesheetWithEntries(tsId);  
-      this.events.set(tsWithEntries.entries);
-      this.updateAggregates();
-      console.log('Loaded timesheet events', { count: this.events().length });
-      this.cdr.markForCheck();
-
-      this.refreshCalendar(); // Ensure refresh after data set
-    } catch (error) {
-      console.error('Failed to load events', error);
-      this.openError('Failed to load events. Please refresh.');
     }
   }
 

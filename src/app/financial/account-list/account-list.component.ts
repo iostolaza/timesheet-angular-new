@@ -3,8 +3,6 @@
 
 import { Component, inject, OnInit } from '@angular/core';
 import { MatTableModule } from '@angular/material/table';
-import { MatButtonModule } from '@angular/material/button';
-import { MatIconModule } from '@angular/material/icon';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { Router, RouterLink } from '@angular/router';
 import { CommonModule, CurrencyPipe } from '@angular/common';
@@ -12,14 +10,27 @@ import { FinancialService } from '../../core/services/financial.service';
 import { EditAccountDialogComponent } from '../edit-account/edit-account-dialog.component';
 import { Account } from '../../core/models/financial.model';
 
+import {MatIconModule} from '@angular/material/icon';
+import {MatMenuModule} from '@angular/material/menu';
+import {MatButtonModule} from '@angular/material/button';
+
 @Component({
   selector: 'app-account-list',
   standalone: true,
-  imports: [CommonModule, MatTableModule, MatButtonModule, MatIconModule, MatDialogModule, CurrencyPipe, RouterLink],
+  imports: [
+    CommonModule,
+    MatTableModule,
+    MatButtonModule,
+    MatIconModule,
+    MatDialogModule,
+    MatMenuModule,
+    CurrencyPipe,
+    RouterLink
+  ],
   templateUrl: './account-list.component.html',
 })
 export class AccountListComponent implements OnInit {
-  displayedColumns: string[] = ['name', 'accountNumber', 'details', 'balance', 'actions'];
+  displayedColumns: string[] = ['accountNumber', 'name', 'details', 'balance', 'actions'];
   dataSource: Account[] = [];
   private financialService = inject(FinancialService);
   private router = inject(Router);
@@ -27,10 +38,6 @@ export class AccountListComponent implements OnInit {
 
   async ngOnInit() {
     this.dataSource = await this.financialService.listAccounts();
-  }
-
-  canPost(account: Account): boolean {
-    return true; 
   }
 
   editAccount(account: Account) {
@@ -49,9 +56,5 @@ export class AccountListComponent implements OnInit {
 
   openLedger(id?: string): void {
     this.router.navigate(['/accounts/ledger', id]);
-  }
-
-  openChargeModal(account: Account): void {
-    console.log('Charge for', account);
   }
 }
