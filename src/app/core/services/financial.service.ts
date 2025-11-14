@@ -242,4 +242,10 @@ export class FinancialService {
     const digits = Array.from(id).map(c => c.charCodeAt(0)).join('');
     return (digits + '0000000000000000').slice(0, 16);
   }
+
+  async getAccountByChargeCode(chargeCode: string): Promise<Account | null> {
+    const accounts = await this.listAccounts();
+    return accounts.find(a => a.chargeCodes?.some(cc => cc.name === chargeCode)) || null;
+  }
+  
 }

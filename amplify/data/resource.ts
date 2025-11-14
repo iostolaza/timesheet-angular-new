@@ -84,12 +84,14 @@ const schema = a.schema({
       endDate: a.date(),
     })
     .authorization(allow => [
-      allow.owner().to(['create', 'read', 'update', 'delete']),
+
       allow.authenticated().to(['create', 'read', 'update']), 
 
       allow.group('Admin').to(['create', 'read', 'update', 'delete']), 
       allow.group('Manager').to(['create', 'read', 'update']), 
-      allow.group('Employee').to(['create', 'read', 'update']), 
+
+      allow.ownerDefinedIn('userId').to(['create', 'read', 'update', 'delete']),
+  
     ]),
 
   TimesheetEntry: a
@@ -105,12 +107,13 @@ const schema = a.schema({
       userId: a.string().required(),
     })
     .authorization(allow => [
-      allow.owner().to(['create', 'read', 'update', 'delete']),
+
       allow.authenticated().to(['create', 'read', 'update']), 
 
       allow.group('Admin').to(['create', 'read', 'update', 'delete']), 
       allow.group('Manager').to(['create', 'read', 'update']), 
-      allow.group('Employee').to(['create', 'read', 'update']), 
+
+      allow.ownerDefinedIn('userId').to(['create', 'read', 'update', 'delete']),
     ]),
 });
 

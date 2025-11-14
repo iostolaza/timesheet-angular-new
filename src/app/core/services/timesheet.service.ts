@@ -102,7 +102,14 @@ export class TimesheetService {
 
   async listTimesheets(status?: 'draft' | 'submitted' | 'approved' | 'rejected', startDate?: string, endDate?: string): Promise<Timesheet[]> {
     const sub = await this.authService.getCurrentUserId();
+    const user = await this.authService.getUserById(sub!);
+    const isAdminOrManager = user?.role === 'Admin' || user?.role === 'Manager';
+
     const filter: any = { userId: { eq: sub! } };
+
+    if (isAdminOrManager) {
+     delete filter.userId; 
+   }
     if (status) filter.status = { eq: status };
     if (startDate) filter.startDate = { eq: startDate };
     if (endDate) filter.endDate = { eq: endDate };
@@ -110,6 +117,11 @@ export class TimesheetService {
     const { data, errors } = await this.client.models.Timesheet.list({ filter });
     if (errors?.length) throw new Error(errors.map(e => e.message).join(', '));
     return data.map(this.mapTimesheetFromSchema);
+  }
+
+  async canApprove(userId: string): Promise<boolean> {
+   const user = await this.authService.getUserById(userId);
+   return user?.role === 'Manager' || user?.role === 'Admin';
   }
 
   async getTimesheetWithEntries(id: string): Promise<Timesheet & { entries: TimesheetEntry[] }> {
@@ -147,6 +159,8 @@ export class TimesheetService {
   // --- Approval and rejection flows ---
   async approveTimesheet(id: string): Promise<Timesheet> {
     const ts = await this.getTimesheetWithEntries(id);
+
+    if (!(await this.canApprove(await this.authService.getCurrentUserId() ?? ''))) throw new Error('Unauthorized to approve');
     if (ts.status !== 'submitted') throw new Error('Only submitted timesheets can be approved');
 
     const user = await this.authService.getUserById(ts.userId);
@@ -156,6 +170,10 @@ export class TimesheetService {
     for (const entry of ts.entries) {
       const account = await this.financialService.getAccountByNumber(entry.chargeCode);
       if (!account) throw new Error(`Account not found for ${entry.chargeCode}`);
+
+      const matchingCode = account.chargeCodes?.find(cc => cc.name === entry.chargeCode);
+      if (!matchingCode) throw new Error(`Charge code ${entry.chargeCode} not found in account ${account.accountNumber}`);
+
       const amount = entry.hours * user.rate;
       totalCost += amount;
 

@@ -66,6 +66,7 @@ export class ReviewComponent implements OnInit, AfterViewInit {
   taxRate = signal<number>(0.015);
   allowEdit = signal<boolean>(false);
   userProfile = signal<UserProfile | null>(null);
+  isAdminOrManager = signal<boolean>(false);
 
   // --- Table Columns ---
   entryColumns = ['date', 'startTime', 'endTime', 'hours', 'chargeCode', 'description'];
@@ -208,6 +209,7 @@ export class ReviewComponent implements OnInit, AfterViewInit {
       this.userRate.set(user?.rate ?? 25);
       this.otMultiplier.set(user?.otMultiplier ?? 1.5);
       this.taxRate.set(user?.taxRate ?? 0.015);
+      this.isAdminOrManager.set(user?.role === 'Admin' || user?.role === 'Manager');
       this.timesheet.set(tsFull);
       this.events.set(tsFull.entries);
       this.chargeCodes.set(accounts.flatMap(a => a.chargeCodes || []));
@@ -530,6 +532,23 @@ export class ReviewComponent implements OnInit, AfterViewInit {
       this.openError(error.message || 'Failed to save changes.');
     } finally {
       this.cdr.markForCheck();
+    }
+  }
+
+    async resubmitTimesheet() {
+    const ts = this.timesheet();
+    if (!ts) return;
+    if (ts.status !== 'rejected') {
+      this.openError('Can only resubmit rejected timesheets.');
+     return;
+    }
+    try {
+      await this.tsService.updateTimesheet({ id: ts.id, status: 'submitted', rejectionReason: undefined });
+      this.timesheet.update(t => t ? { ...t, status: 'submitted', rejectionReason: undefined } : t);
+      this.allowEdit.set(false); // Optional: Disable edits after resubmit
+      this.openSuccess('Timesheet resubmitted.');
+    } catch (error: any) {
+      this.openError(error.message || 'Failed to resubmit.');
     }
   }
 
