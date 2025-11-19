@@ -169,6 +169,12 @@ export class AuthService {
     return this.currentUser()?.id ?? null;
   }
 
+  async isAdminOrManager(): Promise<boolean> {
+    const sub = await this.getCurrentUserId();
+    const user = await this.getUserById(sub ?? '');
+    return user?.role === 'Admin' || user?.role === 'Manager' || false;
+ }
+
   async createUser(payload: Partial<UserProfile>): Promise<UserProfile> {
     if (!payload.email) throw new Error('Email required for create');
     if (!payload.name) payload.name = 'New User';

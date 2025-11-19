@@ -209,13 +209,16 @@ export class ReviewComponent implements OnInit, AfterViewInit {
       this.userRate.set(user?.rate ?? 25);
       this.otMultiplier.set(user?.otMultiplier ?? 1.5);
       this.taxRate.set(user?.taxRate ?? 0.015);
-      this.isAdminOrManager.set(user?.role === 'Admin' || user?.role === 'Manager');
+      this.isAdminOrManager.set(await this.authService.isAdminOrManager());
       this.timesheet.set(tsFull);
       this.events.set(tsFull.entries);
       this.chargeCodes.set(accounts.flatMap(a => a.chargeCodes || []));
 
       // Permissions
-      this.allowEdit.set(['submitted', 'rejected'].includes(tsFull.status));
+      this.allowEdit.set(tsFull.status === 'draft' || tsFull.status === 'rejected'); // Lock if approved/submitted
+      if (tsFull.status === 'approved') {
+       this.openSuccess('Timesheet approved and locked.');
+      }
 
       // Update calendar options reactively
       this.calendarOptions.update(opts => ({
@@ -519,6 +522,7 @@ export class ReviewComponent implements OnInit, AfterViewInit {
   submitReview() {
     if (!this.reviewForm.valid) return;
     const { action, rejectionReason } = this.reviewForm.value;
+    if (action === 'approve') console.log('Approving...');
     this.dialogRef.close({ approved: action === 'approve', rejectionReason });
   }
 
@@ -540,10 +544,11 @@ export class ReviewComponent implements OnInit, AfterViewInit {
     if (!ts) return;
     if (ts.status !== 'rejected') {
       this.openError('Can only resubmit rejected timesheets.');
-     return;
+      return;
     }
     try {
       await this.tsService.updateTimesheet({ id: ts.id, status: 'submitted', rejectionReason: undefined });
+      console.log(`Resubmitted ${ts.id}`);
       this.timesheet.update(t => t ? { ...t, status: 'submitted', rejectionReason: undefined } : t);
       this.allowEdit.set(false); // Optional: Disable edits after resubmit
       this.openSuccess('Timesheet resubmitted.');

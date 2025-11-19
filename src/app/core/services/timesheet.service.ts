@@ -76,6 +76,11 @@ export class TimesheetService {
       dailyAggregatesJson: JSON.stringify([]),
     });
     if (errors?.length) throw new Error(errors.map(e => e.message).join(', '));
+    if (!data) throw new Error('Create failed');
+    // Ensure status is draft
+    if (data.status !== 'draft') throw new Error('Invalid status on create');
+
+    if (errors?.length) throw new Error(errors.map(e => e.message).join(', '));
     return this.mapTimesheetFromSchema(data);
   }
 
@@ -100,23 +105,42 @@ export class TimesheetService {
     return this.mapTimesheetFromSchema(data);
   }
 
-  async listTimesheets(status?: 'draft' | 'submitted' | 'approved' | 'rejected', startDate?: string, endDate?: string): Promise<Timesheet[]> {
+  async listTimesheets(
+    status?: 'draft' | 'submitted' | 'approved' | 'rejected' | ('submitted' | 'approved')[], 
+    startDate?: string,
+    endDate?: string
+  ): Promise<Timesheet[]> {
     const sub = await this.authService.getCurrentUserId();
-    const user = await this.authService.getUserById(sub!);
-    const isAdminOrManager = user?.role === 'Admin' || user?.role === 'Manager';
+    const isAdminOrManager = await this.authService.isAdminOrManager();
 
-    const filter: any = { userId: { eq: sub! } };
+    const filter: any = {};
 
-    if (isAdminOrManager) {
-     delete filter.userId; 
-   }
-    if (status) filter.status = { eq: status };
+    if (!isAdminOrManager) {
+      filter.userId = { eq: sub! };
+    } else {
+      filter.userId = { attributeExists: true };
+    }
+
+    // Support both single status and array of statuses
+    if (status) {
+      if (Array.isArray(status)) {
+        filter.or = status.map(s => ({ status: { eq: s } }));
+      } else {
+        filter.status = { eq: status };
+      }
+    }
+
     if (startDate) filter.startDate = { eq: startDate };
     if (endDate) filter.endDate = { eq: endDate };
 
     const { data, errors } = await this.client.models.Timesheet.list({ filter });
     if (errors?.length) throw new Error(errors.map(e => e.message).join(', '));
-    return data.map(this.mapTimesheetFromSchema);
+
+    const validData = data.filter(d => d.userId != null);
+    if (validData.length < data.length) {
+      console.warn(`Filtered ${data.length - validData.length} invalid timesheets with null userId`);
+    }
+    return validData.map(this.mapTimesheetFromSchema);
   }
 
   async canApprove(userId: string): Promise<boolean> {
@@ -160,44 +184,85 @@ export class TimesheetService {
   async approveTimesheet(id: string): Promise<Timesheet> {
     const ts = await this.getTimesheetWithEntries(id);
 
-    if (!(await this.canApprove(await this.authService.getCurrentUserId() ?? ''))) throw new Error('Unauthorized to approve');
-    if (ts.status !== 'submitted') throw new Error('Only submitted timesheets can be approved');
+    // Authorization
+    if (!(await this.canApprove(await this.authService.getCurrentUserId() ?? ''))) {
+      throw new Error('Unauthorized to approve');
+    }
+    if (ts.status !== 'submitted') {
+      throw new Error('Only submitted timesheets can be approved');
+    }
 
     const user = await this.authService.getUserById(ts.userId);
     if (!user) throw new Error('User not found');
 
-    let totalCost = 0;
+    // Validate every entry has a charge code
     for (const entry of ts.entries) {
-      const account = await this.financialService.getAccountByNumber(entry.chargeCode);
-      if (!account) throw new Error(`Account not found for ${entry.chargeCode}`);
+      if (!entry.chargeCode) {
+        throw new Error(`Entry ${entry.id} is missing a charge code`);
+      }
+    }
 
-      const matchingCode = account.chargeCodes?.find(cc => cc.name === entry.chargeCode);
-      if (!matchingCode) throw new Error(`Charge code ${entry.chargeCode} not found in account ${account.accountNumber}`);
+    // ───── Group by chargeCode → one transaction per charge code (fixes duplicates) ─────
+    const grouped: Record<
+      string,
+      { accountId: string; amount: number; descriptions: string[] }
+    > = {};
+
+    let totalCost = 0;
+
+    for (const entry of ts.entries) {
+      const account = await this.financialService.getAccountByChargeCode(entry.chargeCode);
+      if (!account) throw new Error(`Account not found for charge code ${entry.chargeCode}`);
 
       const amount = entry.hours * user.rate;
       totalCost += amount;
 
+      if (!grouped[entry.chargeCode]) {
+        grouped[entry.chargeCode] = {
+          accountId: account.id,
+          amount: 0,
+          descriptions: [],
+        };
+      }
+      grouped[entry.chargeCode].amount += amount;
+      grouped[entry.chargeCode].descriptions.push(entry.description || '(no description)');
+    }
+
+    // ───── Create ONE transaction per charge code & update account balance ─────
+    for (const [chargeCode, { accountId, amount, descriptions }] of Object.entries(grouped)) {
+      const account = await this.financialService.getAccount(accountId);
+      const newBalance = account.balance - amount;
+
       await this.client.models.Transaction.create({
-        accountId: account.id,
+        accountId,
         amount,
         debit: true,
         date: new Date().toISOString().split('T')[0],
-        description: `Approved timesheet: ${entry.description}`,
-        runningBalance: account.balance - amount,
+        description: `Approved timesheet ${id} – ${chargeCode} – ${descriptions.join('; ')}`,
+        runningBalance: newBalance,
       });
+
       await this.client.models.Account.update({
-        id: account.id,
-        balance: account.balance - amount,
+        id: accountId,
+        balance: newBalance,
       });
+
+      console.log(`Deducted ${amount} from account ${accountId} (charge code ${chargeCode})`);
     }
 
+    // ───── Mark timesheet as approved ─────
     const { data, errors } = await this.client.models.Timesheet.update({
       id,
-      status: 'approved',
+      status: 'approved' as const,
       totalCost,
     });
-    if (errors?.length) throw new Error(errors.map(e => e.message).join(', '));
-    return this.mapTimesheetFromSchema(data);
+
+    if (errors?.length) {
+      throw new Error(errors.map((e) => e.message).join(', '));
+    }
+
+    console.log(`Timesheet ${id} approved – total deducted: ${totalCost}`);
+    return this.mapTimesheetFromSchema(data!);
   }
 
   async rejectTimesheet(id: string, reason: string): Promise<Timesheet> {
@@ -206,6 +271,8 @@ export class TimesheetService {
       status: 'rejected',
       rejectionReason: reason,
     });
+    console.log(`Rejected timesheet ${id}, reason: ${reason}`);
+
     if (errors?.length) throw new Error(errors.map(e => e.message).join(', '));
     return this.mapTimesheetFromSchema(data);
   }
@@ -243,6 +310,7 @@ export class TimesheetService {
       user.otMultiplier ?? 1.5,
       user.taxRate ?? 0.015
     );
+    // Validate totals > 0 if entries exist
     const totalHours = ts.entries.reduce((sum, e) => sum + e.hours, 0);
     await this.client.models.Timesheet.update({
       id,

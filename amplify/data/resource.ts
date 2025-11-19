@@ -75,7 +75,8 @@ const schema = a.schema({
       totalCost: a.float(),
       userId: a.string().required(),
       rejectionReason: a.string(),
-      associatedChargeCodesJson: a.string().default('[]'),
+      // associatedChargeCodesJson: a.string().default('[]'),
+      associatedChargeCodesJson: a.string().default('[]').required(),
       dailyAggregatesJson: a.string().default('[]'),
       grossTotal: a.float(),
       taxAmount: a.float(),
@@ -85,13 +86,10 @@ const schema = a.schema({
     })
     .authorization(allow => [
 
-      allow.authenticated().to(['create', 'read', 'update']), 
-
+      allow.authenticated().to(['create', 'read']), 
       allow.group('Admin').to(['create', 'read', 'update', 'delete']), 
-      allow.group('Manager').to(['create', 'read', 'update']), 
-
-      allow.ownerDefinedIn('userId').to(['create', 'read', 'update', 'delete']),
-  
+      allow.group('Manager').to(['read', 'update']), 
+      allow.ownerDefinedIn('userId').to(['create', 'read', 'update', 'delete']),  
     ]),
 
   TimesheetEntry: a
@@ -109,10 +107,8 @@ const schema = a.schema({
     .authorization(allow => [
 
       allow.authenticated().to(['create', 'read', 'update']), 
-
       allow.group('Admin').to(['create', 'read', 'update', 'delete']), 
       allow.group('Manager').to(['create', 'read', 'update']), 
-
       allow.ownerDefinedIn('userId').to(['create', 'read', 'update', 'delete']),
     ]),
 });
