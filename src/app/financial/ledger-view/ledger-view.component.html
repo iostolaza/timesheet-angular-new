@@ -1,7 +1,6 @@
 
 <!-- src/app/financial/ledger-view/ledger-view.component.html -->
 
-<!-- file: src/app/financial/ledger-view/ledger-view.component.html -->
 <div class="container mx-auto p-4 max-w-7xl">
   <h1 class="text-3xl font-bold text-gray-900 mb-8">{{ account ? 'Ledger for ' + account.name : 'Global Ledger' }}</h1>
   
@@ -24,11 +23,17 @@
         }
         <ng-container matColumnDef="date">
           <th mat-header-cell *matHeaderCellDef class="text-gray-900 font-semibold">Date</th>
-          <td mat-cell *matCellDef="let e" class="text-gray-700">{{ e.date | date:'short' }}</td>
+          <td mat-cell *matCellDef="let e" class="text-gray-700">{{ e.date | date:'yyyy-MM-dd' }}</td>
+          <!-- Options you can choose from:
+         'mediumDate' → Nov 20, 2025
+         'shortDate'  → 11/20/2025
+         'yyyy-MM-dd' → 2025-11-20 (ISO, very common in accounting)
+         'MM/dd/yyyy' → 11/20/2025
+          -->
         </ng-container>
         <ng-container matColumnDef="ref">
-          <th mat-header-cell *matHeaderCellDef class="text-gray-900 font-semibold">Ref</th>
-          <td mat-cell *matCellDef="let e" class="text-gray-700">{{ e.id }}</td>
+          <th mat-header-cell *matHeaderCellDef class="text-gray-900 font-semibold">Transaction ID</th>
+          <td mat-cell *matCellDef="let e" class="text-gray-700">TX-{{ e.id.slice(-6).toUpperCase() }}</td>
         </ng-container>
         <ng-container matColumnDef="description">
           <th mat-header-cell *matHeaderCellDef class="text-gray-900 font-semibold">Description</th>
