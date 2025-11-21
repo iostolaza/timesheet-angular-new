@@ -25,7 +25,7 @@ import {MatButtonModule} from '@angular/material/button';
     MatDialogModule,
     MatMenuModule,
     CurrencyPipe,
-    RouterLink
+    // RouterLink
   ],
   templateUrl: './account-list.component.html',
 })
@@ -56,5 +56,10 @@ export class AccountListComponent implements OnInit {
 
   openLedger(id?: string): void {
     this.router.navigate(['/accounts/ledger', id]);
+  }
+
+  goBack(): void {
+  this.router.navigate(['/start']);
+  // Or simply: this.router.navigateByUrl('/start');
   }
 }

@@ -4,7 +4,8 @@
 import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
+// import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -20,7 +21,7 @@ import { Account } from '../../core/models/financial.model';
   imports: [
     CommonModule,
     FormsModule,
-    RouterLink,
+    // RouterLink,
     MatButtonModule,
     MatDialogModule,
   ],
@@ -36,6 +37,8 @@ export class ManageAccountsComponent implements OnInit {
   private dialog = inject(MatDialog);
   private snackBar = inject(MatSnackBar);
   private cdr = inject(ChangeDetectorRef);
+
+  private router = inject(Router);
 
   async ngOnInit() {
     await this.loadAccounts();
@@ -107,4 +110,9 @@ export class ManageAccountsComponent implements OnInit {
       }
     }
   }
+
+    goBack(): void {
+  this.router.navigate(['/start']);
+  // Or simply: this.router.navigateByUrl('/start');
+}
 }

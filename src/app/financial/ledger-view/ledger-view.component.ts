@@ -7,6 +7,7 @@ import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { FinancialService } from '../../core/services/financial.service';
 import { Transaction, Account } from '../../core/models/financial.model';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-ledger-view',
@@ -24,6 +25,8 @@ export class LedgerViewComponent implements OnInit {
 
   private financialService = inject(FinancialService);
   private route = inject(ActivatedRoute);
+
+  private router = inject(Router);
 
   async ngOnInit() {
     this.loading = true;
@@ -56,5 +59,10 @@ export class LedgerViewComponent implements OnInit {
       return this.account.name;
     }
     return this.accountsMap.get(accountId)?.name || 'Unknown Account';
+  }
+
+  goBack(): void {
+  this.router.navigate(['/start']);
+  // Or simply: this.router.navigateByUrl('/start');
   }
 }

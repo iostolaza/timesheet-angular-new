@@ -2,8 +2,15 @@
 <!-- src/app/financial/ledger-view/ledger-view.component.html -->
 
 <div class="container mx-auto p-4 max-w-7xl">
-  <h1 class="text-3xl font-bold text-gray-900 mb-8">{{ account ? 'Ledger for ' + account.name : 'Global Ledger' }}</h1>
-  
+
+  <div class="flex justify-between items-center mb-8">
+  <h1 class="text-3xl font-bold text-gray-900">{{ account ? 'Ledger for ' + account.name : 'Global Ledger' }}</h1>
+
+  <button 
+      class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium transition shadow-sm"
+      (click)="goBack()"
+      aria-label="Back to Dashboard">Back</button>
+  </div>
   @if (loading) {
     <div class="text-center py-8 text-gray-600">Loading...</div>
   }

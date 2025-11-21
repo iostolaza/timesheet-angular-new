@@ -9,6 +9,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { ReviewComponent } from '../review-form/review-form.component';
 import { Timesheet } from '../../core/models/timesheet.model';
 import { format, parseISO } from 'date-fns';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-review-list',
@@ -23,6 +24,8 @@ export class ReviewListComponent implements OnInit {
   private tsService = inject(TimesheetService);
   private authService = inject(AuthService);
   private dialog = inject(MatDialog);
+
+  private router = inject(Router);
 
   async ngOnInit(): Promise<void> {
     // Now shows both submitted AND approved timesheets
@@ -66,4 +69,9 @@ export class ReviewListComponent implements OnInit {
       }
     });
   }
+
+  goBack(): void {
+  this.router.navigate(['/start']);
+  // Or simply: this.router.navigateByUrl('/start');
+}
 }

@@ -5,11 +5,12 @@
   <!-- Header Section -->
   <header class="flex justify-between items-center mb-8">
     <h1 class="text-3xl font-bold text-gray-900">Manage Accounts</h1>
-    <a
-      routerLink="/start"
-      class="text-blue-600 hover:text-blue-700 font-semibold"
-      aria-label="Back to Dashboard"
-    >Back to Dashboard</a>
+
+      <button 
+      class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium transition shadow-sm"
+      (click)="goBack()"
+      aria-label="Back to Dashboard">Back</button>
+
   </header>
 
   <!-- Action Cards Section -->
