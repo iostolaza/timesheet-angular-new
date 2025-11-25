@@ -29,7 +29,15 @@ import { TimesheetEntry } from '../../core/models/timesheet.model';
 import { ChargeCode } from '../../core/models/financial.model';
 import { DayEntryDialogComponent } from './day-entry-dialog.component';
 import { ChargeCodeSearchDialogComponent } from '../../timesheet/charge-code-search/charge-code-search.component';
-import { format, startOfMonth, endOfMonth, addDays, parseISO, startOfWeek, endOfWeek } from 'date-fns';
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  addDays,
+  parseISO,
+  startOfWeek,
+  endOfWeek,
+} from 'date-fns';
 
 @Component({
   selector: 'app-calendar',
@@ -49,13 +57,20 @@ import { format, startOfMonth, endOfMonth, addDays, parseISO, startOfWeek, endOf
 })
 export class CalendarComponent implements OnInit, AfterViewInit {
   @ViewChild('calendar') calendarComponent!: FullCalendarComponent;
+
   events = signal<TimesheetEntry[]>([]);
-  weekRange = signal('');
-  userEmail = signal('');
-  weeklyTotal = signal(0);
-  dailyAvg = signal(0);
-  totalCost = signal(0);
-  validationMessage = signal('');
+
+  currentWeekRange = signal<string>('');
+  currentWeekHours = signal<number>(0);
+  currentWeekCost = signal<number>(0);
+  periodTotalHours = signal<number>(0);
+  periodTotalCost = signal<number>(0); 
+  
+  weeklyTotal = signal<number>(0);   
+  totalCost = signal<number>(0);
+
+  userEmail = signal<string>('');
+  validationMessage = signal<string>('');
   chargeCodes = signal<ChargeCode[]>([]);
   currentTimesheetId = signal<string | null>(null);
   associatedChargeCodes = signal<ChargeCode[]>([]);
@@ -70,7 +85,6 @@ export class CalendarComponent implements OnInit, AfterViewInit {
   private dialog = inject(MatDialog);
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
-
   private today = new Date();
 
   calendarOptions = {
@@ -126,49 +140,63 @@ export class CalendarComponent implements OnInit, AfterViewInit {
     },
   };
 
-  async ngOnInit() {
-    try {
-      const email = this.authService.getCurrentUserSync()?.email ?? '';
-      if (email) this.userEmail.set(email);
+async ngOnInit() {
+  try {
+    const email = this.authService.getCurrentUserSync()?.email ?? '';
+    if (email) this.userEmail.set(email);
 
-      const sub = await this.authService.getCurrentUserId();
-      const user = await this.authService.getUserById(sub!);
-      this.userRate.set(user?.rate || 25);
+    const sub = await this.authService.getCurrentUserId();
+    const user = await this.authService.getUserById(sub!);
+    this.userRate.set(user?.rate || 25);
 
-      const { startStr, endStr } = this.getSemiMonthlyPeriod(this.today);
-      this.periodStart.set(startStr);
-      this.periodEnd.set(endStr);
-      this.weekRange.set(`${format(parseISO(startStr), 'MMM d')} – ${format(parseISO(endStr), 'd, yyyy')}`);
+    // Only set pay period — DO NOT touch currentWeekRange here!
+    const { startStr, endStr } = this.getSemiMonthlyPeriod(this.today);
+    this.periodStart.set(startStr);
+    this.periodEnd.set(endStr);
 
-      await this.loadDraftAndEvents();
-      console.log('Initialized calendar component', {
-        userEmail: this.userEmail(),
-        timesheetId: this.currentTimesheetId(),
-      });
-    } catch (error) {
-      console.error('Failed to initialize component', error);
-      this.openError('Failed to initialize timesheet. Please try again.');
-    }
+    await this.loadDraftAndEvents();
+
+    console.log('Initialized calendar component', {
+      userEmail: this.userEmail(),
+      timesheetId: this.currentTimesheetId(),
+    });
+  } catch (error) {
+    console.error('Failed to initialize component', error);
+    this.openError('Failed to initialize timesheet. Please try again.');
   }
+}
 
-  ngAfterViewInit() {
-    try {
-      this.calendarComponent.getApi().refetchEvents();
-    } catch (error) {
-      console.error('Failed initial refetch', error);
-    }
-  }
+ngAfterViewInit() {
+  this.calendarComponent.getApi().refetchEvents();
+}
 
-  handleDatesSet(info: any) {
-    const viewStart = new Date(info.startStr.split('T')[0]);
-    const { startStr, endStr } = this.getSemiMonthlyPeriod(viewStart);
-    if (startStr !== this.periodStart() || endStr !== this.periodEnd()) {
-      this.periodStart.set(startStr);
-      this.periodEnd.set(endStr);
-      this.weekRange.set(`${format(parseISO(startStr), 'MMM d')} – ${format(parseISO(endStr), 'd, yyyy')}`);
-      this.loadDraftAndEvents();
-    }
+handleDatesSet(info: any) {
+  const calendarApi = this.calendarComponent.getApi();
+  if (!calendarApi) return;
+
+  const view = calendarApi.view;
+  const start = new Date(view.activeStart); // First visible day (always Sunday)
+  const end = new Date(view.activeEnd);     // Next Sunday (exclusive)
+
+  // Convert exclusive end to inclusive Saturday
+  const weekEnd = new Date(end);
+  weekEnd.setDate(weekEnd.getDate() - 1);
+
+  const range = `${format(start, 'MMMM d')} – ${format(weekEnd, 'd, yyyy')}`;
+  this.currentWeekRange.set(range);
+
+  console.log('datesSet → Correct week range (Sun–Sat):', range);
+
+  // Pay period logic — use the visible week's Sunday as reference
+  const { startStr, endStr } = this.getSemiMonthlyPeriod(start);
+  if (startStr !== this.periodStart() || endStr !== this.periodEnd()) {
+    this.periodStart.set(startStr);
+    this.periodEnd.set(endStr);
+    this.loadDraftAndEvents();
+  } else {
+    this.updateSummary();
   }
+}
 
   private async loadDraftAndEvents() {
     const draft = await this.tsService.ensureDraftTimesheet(this.periodStart(), this.periodEnd());
@@ -384,14 +412,23 @@ async handleEventClick(info: any) {
     });
   }
 
-private calculateWeeklyTotal(events: TimesheetEntry[], referenceDate: string): number {
-    const date = parseISO(referenceDate);
-    const weekStart = startOfWeek(date, { weekStartsOn: 1 });
-    const weekEnd = endOfWeek(date, { weekStartsOn: 1 });
-    return events
-      .filter(e => parseISO(e.date) >= weekStart && parseISO(e.date) <= weekEnd)
-      .reduce((sum, e) => sum + e.hours, 0);
-  }
+private calculateWeeklyTotal(entries: TimesheetEntry[], referenceDate: string): number {
+  const refDate = parseISO(referenceDate);
+  const dayOfWeek = refDate.getDay(); // 0 = Sunday, 6 = Saturday
+
+  const sunday = new Date(refDate);
+  sunday.setDate(refDate.getDate() - dayOfWeek);
+
+  const saturday = new Date(sunday);
+  saturday.setDate(sunday.getDate() + 6);
+
+  return entries
+    .filter(e => {
+      const d = parseISO(e.date);
+      return d >= sunday && d <= saturday;
+    })
+    .reduce((sum, e) => sum + e.hours, 0);
+}
 
   async handleEventDrop(info: any) {
     const entry = info.event.extendedProps.entry;
@@ -490,43 +527,58 @@ private calculateWeeklyTotal(events: TimesheetEntry[], referenceDate: string): n
 
 private updateSummary() {
     const allEntries = this.events();
+
+    // Determine currently visible week start
     const calendarApi = this.calendarComponent?.getApi();
-    const viewStart = calendarApi ? parseISO(calendarApi.view.activeStart.toISOString().split('T')[0]) : this.today;
-    const viewWeekTotal = this.calculateWeeklyTotal(allEntries, format(viewStart, 'yyyy-MM-dd'));
-    this.weeklyTotal.set(viewWeekTotal);
-    this.dailyAvg.set(this.weeklyTotal() / 5);
-    this.totalCost.set(allEntries.reduce((sum, e) => sum + e.hours * this.userRate(), 0)); // Full period
+    const viewStart = calendarApi
+    ? new Date(calendarApi.view.activeStart)
+    : this.today;
+
+    const weekHours = this.calculateWeeklyTotal(allEntries, format(viewStart, 'yyyy-MM-dd'));
+
+    // Update all signals
+    this.currentWeekHours.set(weekHours);
+    this.currentWeekCost.set(weekHours * this.userRate());
+
+    const periodHours = allEntries.reduce((sum, e) => sum + e.hours, 0);
+    this.periodTotalHours.set(periodHours);
+    this.periodTotalCost.set(periodHours * this.userRate());
+
+    // Legacy signals (still used by submit & old validation logic)
+    this.weeklyTotal.set(weekHours);
+    this.totalCost.set(periodHours * this.userRate());
+
     this.validate();
-    console.log('Updated summary', {
-      weeklyHours: this.weeklyTotal(),
-      totalCost: this.totalCost(),
-    });
     this.cdr.markForCheck();
   }
 
-  private validate() {
+private validate() {
     let msg = '';
     const allEntries = this.events();
-    // Daily
+
+    // Daily limit
     const dateTotals = new Map<string, number>();
     allEntries.forEach(e => {
       dateTotals.set(e.date, (dateTotals.get(e.date) || 0) + e.hours);
     });
-    const dailyExceed = Array.from(dateTotals.values()).some(total => total > 8);
-    if (dailyExceed) msg += 'Daily hours exceed 8h; ';
+    if (Array.from(dateTotals.values()).some(total => total > 8)) {
+      msg += 'Daily hours exceed 8h; ';
+    }
 
-    // Weekly (all weeks in period)
+    // Weekly limit (across entire pay period)
     const weekTotals = new Map<string, number>();
     allEntries.forEach(e => {
       const weekKey = format(startOfWeek(parseISO(e.date), { weekStartsOn: 1 }), 'yyyy-MM-dd');
       weekTotals.set(weekKey, (weekTotals.get(weekKey) || 0) + e.hours);
     });
-    const weeklyExceed = Array.from(weekTotals.values()).some(total => total > 40);
-    if (weeklyExceed) msg += 'Weekly hours exceed 40h; ';
+    if (Array.from(weekTotals.values()).some(total => total > 40)) {
+      msg += 'Weekly hours exceed 40h; ';
+    }
 
-    // Charge code
-    const hasUnassigned = allEntries.some(e => !e.chargeCode || e.chargeCode.trim() === ' ' || e.chargeCode === 'Unassigned');
-    if (hasUnassigned) msg += 'All entries must have a valid charge code; ';
+    // Charge code requirement
+    if (allEntries.some(e => !e.chargeCode || e.chargeCode.trim() === ' ' || e.chargeCode === 'Unassigned')) {
+      msg += 'All entries must have a valid charge code; ';
+    }
 
     this.validationMessage.set(msg);
     if (msg) this.openError(msg);
