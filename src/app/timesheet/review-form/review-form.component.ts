@@ -8,7 +8,8 @@ import {
   ViewChild,
   ChangeDetectorRef,
   signal,
-  ChangeDetectionStrategy
+  ChangeDetectionStrategy,
+  computed
 } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -64,9 +65,24 @@ export class ReviewComponent implements OnInit, AfterViewInit {
   userRate = signal<number>(0);
   otMultiplier = signal<number>(1.5);
   taxRate = signal<number>(0.015);
-  allowEdit = signal<boolean>(false);
+  // allowEdit = signal<boolean>(false);
   userProfile = signal<UserProfile | null>(null);
   isAdminOrManager = signal<boolean>(false);
+
+  readonly canEmployeeEdit = computed(() => {
+    const ts = this.timesheet();
+    if (!ts) return false;
+    const currentUserId = this.authService.getCurrentUserSync()?.id;
+    if (!currentUserId) return false;
+
+    const isOwner = ts.userId === currentUserId;
+    const isAdmin = this.isAdminOrManager();
+
+    return ts.status === 'draft' || 
+          (isOwner && (ts.status === 'submitted' || ts.status === 'rejected')) ||
+          isAdmin;
+  });
+
 
   // --- Table Columns ---
   entryColumns = ['date', 'startTime', 'endTime', 'hours', 'chargeCode', 'description'];
@@ -215,7 +231,7 @@ export class ReviewComponent implements OnInit, AfterViewInit {
       this.chargeCodes.set(accounts.flatMap(a => a.chargeCodes || []));
 
       // Permissions
-      this.allowEdit.set(tsFull.status === 'draft' || tsFull.status === 'rejected'); // Lock if approved/submitted
+      // this.allowEdit.set(tsFull.status === 'draft' || tsFull.status === 'rejected'); 
       if (tsFull.status === 'approved') {
        this.openSuccess('Timesheet approved and locked.');
       }
@@ -223,12 +239,18 @@ export class ReviewComponent implements OnInit, AfterViewInit {
       // Update calendar options reactively
       this.calendarOptions.update(opts => ({
         ...opts,
-        editable: this.allowEdit(),
-        selectable: this.allowEdit(),
-        select: this.allowEdit() ? this.handleSelect.bind(this) : undefined,
-        eventClick: this.allowEdit() ? this.handleEventClick.bind(this) : undefined,
-        eventDrop: this.allowEdit() ? this.handleEventDrop.bind(this) : undefined,
-        eventResize: this.allowEdit() ? this.handleEventResize.bind(this) : undefined,
+        // editable: this.allowEdit(),
+        // selectable: this.allowEdit(),
+        // select: this.allowEdit() ? this.handleSelect.bind(this) : undefined,
+        // eventClick: this.allowEdit() ? this.handleEventClick.bind(this) : undefined,
+        // eventDrop: this.allowEdit() ? this.handleEventDrop.bind(this) : undefined,
+        // eventResize: this.allowEdit() ? this.handleEventResize.bind(this) : undefined,
+        editable: this.canEmployeeEdit(),
+        selectable: this.canEmployeeEdit(),
+        select: this.canEmployeeEdit() ? this.handleSelect.bind(this) : undefined,
+        eventClick: this.canEmployeeEdit() ? this.handleEventClick.bind(this) : undefined,
+        eventDrop: this.canEmployeeEdit() ? this.handleEventDrop.bind(this) : undefined,
+        eventResize: this.canEmployeeEdit() ? this.handleEventResize.bind(this) : undefined,
       }));
 
       // Aggregates
@@ -306,7 +328,7 @@ export class ReviewComponent implements OnInit, AfterViewInit {
   // Event Handlers
   // ----------------------
   async handleSelect(info: any) {
-    if (!this.allowEdit()) return;
+    if (!this.canEmployeeEdit()) return;
     try {
       const date = info.startStr.split('T')[0];
       const startTime = info.startStr.split('T')[1]?.substring(0, 5) || '08:00';
@@ -373,7 +395,7 @@ export class ReviewComponent implements OnInit, AfterViewInit {
   }
 
   async handleEventClick(info: any) {
-    if (!this.allowEdit()) return;
+    if (!this.canEmployeeEdit()) return;
     const entry = info.event.extendedProps.entry;
     if (!entry) {
       console.error('No entry found for event', { eventId: info.event.id });
@@ -405,7 +427,7 @@ export class ReviewComponent implements OnInit, AfterViewInit {
   }
 
   async handleEventDrop(info: any) {
-    if (!this.allowEdit()) { info.revert(); return; }
+    if (!this.canEmployeeEdit()) { info.revert(); return; }
     const entry = info.event.extendedProps.entry;
     if (!entry) {
       console.error('No entry found for event drop', { eventId: info.event.id });
@@ -444,7 +466,7 @@ export class ReviewComponent implements OnInit, AfterViewInit {
   }
 
   async handleEventResize(info: any) {
-    if (!this.allowEdit()) { info.revert(); return; }
+    if (!this.canEmployeeEdit()) { info.revert(); return; }
     const entry = info.event.extendedProps.entry;
     if (!entry) {
       console.error('No entry found for event resize', { eventId: info.event.id });
@@ -482,7 +504,7 @@ export class ReviewComponent implements OnInit, AfterViewInit {
   }
 
   private async handleDelete(entry: TimesheetEntry) {
-    if (!this.allowEdit()) return;
+    if (!this.canEmployeeEdit()) return;
 
     try {
       const timesheetId = this.timesheet()!.id;
@@ -550,7 +572,6 @@ export class ReviewComponent implements OnInit, AfterViewInit {
       await this.tsService.updateTimesheet({ id: ts.id, status: 'submitted', rejectionReason: undefined });
       console.log(`Resubmitted ${ts.id}`);
       this.timesheet.update(t => t ? { ...t, status: 'submitted', rejectionReason: undefined } : t);
-      this.allowEdit.set(false); // Optional: Disable edits after resubmit
       this.openSuccess('Timesheet resubmitted.');
     } catch (error: any) {
       this.openError(error.message || 'Failed to resubmit.');
